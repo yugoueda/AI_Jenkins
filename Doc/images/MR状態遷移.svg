@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2a7de1"/>
+    </marker>
+    <style>
+      text { font-family: "Noto Sans JP", "Yu Gothic", sans-serif; fill: #1f2937; }
+      .state { fill: #ffffff; stroke: #2a7de1; stroke-width: 2; rx: 8; }
+      .end { fill: #e8f4fd; stroke: #2a7de1; stroke-width: 2; rx: 8; }
+      .label { font-size: 20px; font-weight: 700; }
+      .note { font-size: 14px; fill: #475569; }
+      .arrow { stroke: #2a7de1; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .rework { stroke: #ef4444; stroke-width: 3; fill: none; marker-end: url(#arrow); stroke-dasharray: 8 6; }
+    </style>
+  </defs>
+
+  <rect x="35" y="35" width="1130" height="550" fill="#f8fafc" stroke="#dbeafe" stroke-width="2" rx="12"/>
+
+  <rect class="state" x="85" y="100" width="145" height="58"/>
+  <text x="157" y="136" text-anchor="middle" class="label">Opend</text>
+
+  <rect class="state" x="300" y="100" width="155" height="58"/>
+  <text x="377" y="136" text-anchor="middle" class="label">レビュー中</text>
+
+  <rect class="state" x="525" y="100" width="205" height="58"/>
+  <text x="627" y="136" text-anchor="middle" class="label">レビュー指摘対応中</text>
+
+  <rect class="state" x="300" y="275" width="215" height="58"/>
+  <text x="407" y="311" text-anchor="middle" class="label">ユニットテスト生成中</text>
+
+  <rect class="state" x="585" y="275" width="165" height="58"/>
+  <text x="667" y="311" text-anchor="middle" class="label">テスト確認中</text>
+
+  <rect class="state" x="820" y="275" width="145" height="58"/>
+  <text x="892" y="311" text-anchor="middle" class="label">マージ待ち</text>
+
+  <rect class="end" x="1030" y="275" width="120" height="58"/>
+  <text x="1090" y="311" text-anchor="middle" class="label">Closed</text>
+
+  <path class="arrow" d="M230 129 H290"/>
+  <text x="260" y="112" text-anchor="middle" class="note">MR opened</text>
+
+  <path class="arrow" d="M455 129 H515"/>
+  <text x="485" y="112" text-anchor="middle" class="note">指摘あり</text>
+
+  <path class="arrow" d="M377 158 V265"/>
+  <text x="430" y="218" text-anchor="middle" class="note">指摘なし</text>
+
+  <path class="arrow" d="M515 304 H575"/>
+  <text x="545" y="287" text-anchor="middle" class="note">生成・実行完了</text>
+
+  <path class="arrow" d="M750 304 H810"/>
+  <text x="780" y="287" text-anchor="middle" class="note">テスト成功</text>
+
+  <path class="arrow" d="M965 304 H1020"/>
+  <text x="992" y="287" text-anchor="middle" class="note">merge</text>
+
+  <path class="arrow" d="M627 158 C627 215 455 215 407 265"/>
+  <text x="535" y="232" text-anchor="middle" class="note">全指摘Resolve / push更新</text>
+
+  <path class="rework" d="M667 275 C667 205 627 205 627 168"/>
+  <text x="700" y="214" class="note">バグ検出</text>
+
+  <path class="rework" d="M892 275 C892 205 450 205 377 168"/>
+  <text x="760" y="194" class="note">push更新</text>
+
+  <text x="95" y="505" class="note">ビルド/静的解析/テスト実行エラーは状態を進めず、MRコメントで通知</text>
+</svg>

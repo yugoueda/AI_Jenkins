@@ -1,0 +1,20 @@
+// test/{source_path}_test.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('{condition_and_expected_result}', (tester) async {
+    // arrange
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: {WidgetUnderTest}(),
+      ),
+    );
+
+    // act
+    await tester.pump();
+
+    // assert
+    expect(find.byType({WidgetUnderTest}), findsOneWidget);
+  });
+}

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2a7de1"/>
+    </marker>
+    <style>
+      text { font-family: "Noto Sans JP", "Yu Gothic", sans-serif; fill: #1f2937; }
+      .actor { fill: #e8f4fd; stroke: #2a7de1; stroke-width: 2; rx: 8; }
+      .box { fill: #ffffff; stroke: #94a3b8; stroke-width: 2; rx: 8; }
+      .step { font-size: 19px; font-weight: 700; }
+      .note { font-size: 15px; fill: #475569; }
+      .arrow { stroke: #2a7de1; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect x="35" y="35" width="1130" height="550" fill="#f8fafc" stroke="#dbeafe" stroke-width="2" rx="12"/>
+
+  <rect class="actor" x="70" y="70" width="160" height="48"/>
+  <text x="150" y="101" text-anchor="middle" class="step">User</text>
+  <rect class="actor" x="285" y="70" width="160" height="48"/>
+  <text x="365" y="101" text-anchor="middle" class="step">GitLab</text>
+  <rect class="actor" x="500" y="70" width="180" height="48"/>
+  <text x="590" y="101" text-anchor="middle" class="step">Webhook</text>
+  <rect class="actor" x="735" y="70" width="170" height="48"/>
+  <text x="820" y="101" text-anchor="middle" class="step">Jenkins</text>
+  <rect class="actor" x="960" y="70" width="170" height="48"/>
+  <text x="1045" y="101" text-anchor="middle" class="step">AI Agent</text>
+
+  <line x1="150" y1="118" x2="150" y2="545" stroke="#cbd5e1" stroke-dasharray="6 8"/>
+  <line x1="365" y1="118" x2="365" y2="545" stroke="#cbd5e1" stroke-dasharray="6 8"/>
+  <line x1="590" y1="118" x2="590" y2="545" stroke="#cbd5e1" stroke-dasharray="6 8"/>
+  <line x1="820" y1="118" x2="820" y2="545" stroke="#cbd5e1" stroke-dasharray="6 8"/>
+  <line x1="1045" y1="118" x2="1045" y2="545" stroke="#cbd5e1" stroke-dasharray="6 8"/>
+
+  <path class="arrow" d="M150 165 H355"/>
+  <text x="250" y="153" text-anchor="middle" class="note">MR作成</text>
+  <path class="arrow" d="M365 210 H580"/>
+  <text x="472" y="198" text-anchor="middle" class="note">Hook通知</text>
+  <path class="arrow" d="M590 255 H810"/>
+  <text x="700" y="243" text-anchor="middle" class="note">ビルド/静的解析</text>
+  <path class="arrow" d="M820 300 H600"/>
+  <text x="710" y="288" text-anchor="middle" class="note">実行結果</text>
+  <path class="arrow" d="M590 345 H1035"/>
+  <text x="812" y="333" text-anchor="middle" class="note">初回レビュー依頼</text>
+  <path class="arrow" d="M1045 390 H375"/>
+  <text x="710" y="378" text-anchor="middle" class="note">AIレビュー結果コメント</text>
+
+  <rect class="box" x="80" y="420" width="1030" height="48"/>
+  <text x="595" y="451" text-anchor="middle" class="step">指摘対応・修正案確認/承認</text>
+
+  <path class="arrow" d="M150 505 H580"/>
+  <text x="365" y="493" text-anchor="middle" class="note">全指摘Resolve / push更新</text>
+  <path class="arrow" d="M590 535 H810"/>
+  <text x="700" y="523" text-anchor="middle" class="note">再ビルド/再静的解析</text>
+  <path class="arrow" d="M590 565 H1035"/>
+  <text x="812" y="553" text-anchor="middle" class="note">再レビュー・ユニットテスト依頼</text>
+</svg>
