@@ -1,0 +1,11 @@
+configuration-as-code
+credentials-binding
+docker-workflow
+git
+gitlab-plugin
+junit
+pipeline-stage-view
+ssh-agent
+timestamper
+workflow-aggregator
+ws-cleanup

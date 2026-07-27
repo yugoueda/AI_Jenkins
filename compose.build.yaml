@@ -1,0 +1,10 @@
+services:
+  cert-init:
+    build:
+      context: .
+      dockerfile: jenkins/Dockerfile
+
+  jenkins:
+    build:
+      context: .
+      dockerfile: jenkins/Dockerfile

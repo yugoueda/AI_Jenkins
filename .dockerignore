@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.venv
+.pytest_cache
+__pycache__
+*.py[cod]
+coverage.xml
+junit.xml
+db
+Doc
+Plan
+jenkins/certs

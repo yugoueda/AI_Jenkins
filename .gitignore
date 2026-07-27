@@ -7,3 +7,14 @@ coverage.xml
 junit.xml
 db/
 uvicorn.*.log
+
+# Local infrastructure settings and secrets
+.env
+*.local
+
+# Jenkins runtime files (named Docker volumes are used in production)
+jenkins/certs/*
+!jenkins/certs/.gitkeep
+
+# Generated deployment bundles
+dist/
