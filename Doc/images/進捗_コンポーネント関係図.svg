@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1050" viewBox="0 0 1600 1050" role="img" aria-labelledby="title desc">
+  <title id="title">AI Review Jenkins 進捗・コンポーネント関係図</title>
+  <desc id="desc">GitLabからWebhook、ジョブキュー、Worker、Claude Code CLI、DB、Jenkinsへ至るコンポーネントの関係と、完了、一部実装、未実装の状態を示す図</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#dc2626"/>
+    </marker>
+    <style>
+      text { font-family: "Noto Sans JP", "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif; fill: #0f172a; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 15px; fill: #475569; }
+      .section { font-size: 16px; font-weight: 700; fill: #475569; letter-spacing: 1px; }
+      .label { font-size: 18px; font-weight: 700; }
+      .detail { font-size: 13px; fill: #475569; }
+      .edge-label { font-size: 13px; fill: #475569; }
+      .done { fill: #dcfce7; stroke: #16a34a; stroke-width: 2.5; }
+      .partial { fill: #fef3c7; stroke: #d97706; stroke-width: 2.5; }
+      .missing { fill: #fee2e2; stroke: #dc2626; stroke-width: 2.5; }
+      .external { fill: #f1f5f9; stroke: #64748b; stroke-width: 2.5; }
+      .panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; }
+      .arrow { fill: none; stroke: #475569; stroke-width: 2.2; marker-end: url(#arrow); }
+      .arrow-missing { fill: none; stroke: #dc2626; stroke-width: 2.2; stroke-dasharray: 8 6; marker-end: url(#arrow-red); }
+      .arrow-support { fill: none; stroke: #94a3b8; stroke-width: 1.8; stroke-dasharray: 6 5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1050" fill="#ffffff"/>
+  <text x="60" y="55" class="title">AI Review Jenkins 進捗・コンポーネント関係図</text>
+  <text x="60" y="82" class="subtitle">2026-07-29時点 ─ 実装・稼働状態・テスト・計画表を照合</text>
+
+  <g transform="translate(995 38)">
+    <rect class="done" x="0" y="0" width="26" height="20" rx="4"/>
+    <text x="36" y="16" class="detail">完了</text>
+    <rect class="partial" x="110" y="0" width="26" height="20" rx="4"/>
+    <text x="146" y="16" class="detail">一部実装</text>
+    <rect class="missing" x="245" y="0" width="26" height="20" rx="4"/>
+    <text x="281" y="16" class="detail">未実装</text>
+    <rect class="external" x="365" y="0" width="26" height="20" rx="4"/>
+    <text x="401" y="16" class="detail">外部</text>
+  </g>
+
+  <rect class="panel" x="40" y="115" width="260" height="770" rx="14"/>
+  <rect class="panel" x="325" y="115" width="340" height="770" rx="14"/>
+  <rect class="panel" x="690" y="115" width="390" height="770" rx="14"/>
+  <rect class="panel" x="1105" y="115" width="455" height="770" rx="14"/>
+  <text x="65" y="150" class="section">利用者・外部サービス</text>
+  <text x="350" y="150" class="section">受信・制御</text>
+  <text x="715" y="150" class="section">AI処理</text>
+  <text x="1130" y="150" class="section">結果返却・CI</text>
+
+  <g>
+    <rect class="external" x="75" y="195" width="190" height="76" rx="10"/>
+    <text x="170" y="225" text-anchor="middle" class="label">開発者</text>
+    <text x="170" y="249" text-anchor="middle" class="detail">MR作成・コマンド入力</text>
+
+    <rect class="external" x="65" y="335" width="210" height="100" rx="10"/>
+    <text x="170" y="370" text-anchor="middle" class="label">GitLab</text>
+    <text x="170" y="394" text-anchor="middle" class="detail">MR / Discussion</text>
+    <text x="170" y="415" text-anchor="middle" class="detail">ソースブランチ</text>
+
+    <path class="arrow" d="M170 271 V325"/>
+    <text x="182" y="305" class="edge-label">操作</text>
+  </g>
+
+  <g>
+    <rect class="done" x="370" y="195" width="250" height="104" rx="10"/>
+    <text x="495" y="228" text-anchor="middle" class="label">Webhook受信API</text>
+    <text x="495" y="252" text-anchor="middle" class="detail">FastAPI・署名検証</text>
+    <text x="495" y="273" text-anchor="middle" class="detail">イベント振り分け</text>
+
+    <rect class="partial" x="370" y="350" width="250" height="118" rx="10"/>
+    <text x="495" y="383" text-anchor="middle" class="label">コマンド処理</text>
+    <text x="495" y="407" text-anchor="middle" class="detail">approve / reject / test 実装</text>
+    <text x="495" y="428" text-anchor="middle" class="detail">reviewはno-op</text>
+    <text x="495" y="449" text-anchor="middle" class="detail">apply / ai review 未実装</text>
+
+    <rect class="done" x="370" y="535" width="250" height="104" rx="10"/>
+    <text x="495" y="568" text-anchor="middle" class="label">ジョブキュー / DB</text>
+    <text x="495" y="592" text-anchor="middle" class="detail">WAITING登録・排他制御</text>
+    <text x="495" y="613" text-anchor="middle" class="detail">findings・patch・状態管理</text>
+
+    <path class="arrow" d="M495 299 V340"/>
+    <path class="arrow" d="M495 468 V525"/>
+  </g>
+
+  <g>
+    <rect class="done" x="755" y="505" width="260" height="104" rx="10"/>
+    <text x="885" y="538" text-anchor="middle" class="label">常駐Worker</text>
+    <text x="885" y="562" text-anchor="middle" class="detail">claim・逐次実行</text>
+    <text x="885" y="583" text-anchor="middle" class="detail">stale復旧・完了状態更新</text>
+
+    <rect class="partial" x="755" y="330" width="260" height="118" rx="10"/>
+    <text x="885" y="363" text-anchor="middle" class="label">Claude Code CLI</text>
+    <text x="885" y="387" text-anchor="middle" class="detail">timeout・retry・モデル切替</text>
+    <text x="885" y="408" text-anchor="middle" class="detail">模擬応答テスト済み</text>
+    <text x="885" y="429" text-anchor="middle" class="detail">実OAuth応答は未確認</text>
+
+    <rect class="done" x="755" y="180" width="260" height="92" rx="10"/>
+    <text x="885" y="213" text-anchor="middle" class="label">Agent / Skill / Prompt</text>
+    <text x="885" y="237" text-anchor="middle" class="detail">レビュー・修正・Flutterテスト</text>
+    <text x="885" y="257" text-anchor="middle" class="detail">定義ファイル実装済み</text>
+
+    <rect class="partial" x="755" y="680" width="260" height="104" rx="10"/>
+    <text x="885" y="713" text-anchor="middle" class="label">テスト生成結果</text>
+    <text x="885" y="737" text-anchor="middle" class="detail">出力解析まで実装</text>
+    <text x="885" y="758" text-anchor="middle" class="detail">保存・実行・結果連携は未実装</text>
+
+    <path class="arrow" d="M620 587 H745"/>
+    <path class="arrow" d="M885 505 V458"/>
+    <path class="arrow" d="M885 330 V282"/>
+    <path class="arrow" d="M885 609 V670"/>
+  </g>
+
+  <g>
+    <rect class="missing" x="1155" y="180" width="350" height="100" rx="10"/>
+    <text x="1330" y="213" text-anchor="middle" class="label">GitLab API実連携</text>
+    <text x="1330" y="237" text-anchor="middle" class="detail">MRコメント投稿・Discussion確認</text>
+    <text x="1330" y="258" text-anchor="middle" class="detail">現在はログ出力スタブのみ</text>
+
+    <rect class="missing" x="1155" y="335" width="350" height="100" rx="10"/>
+    <text x="1330" y="368" text-anchor="middle" class="label">Git操作</text>
+    <text x="1330" y="392" text-anchor="middle" class="detail">patch適用・commit・push</text>
+    <text x="1330" y="413" text-anchor="middle" class="detail">approve後の実変更は未実装</text>
+
+    <rect class="done" x="1155" y="520" width="350" height="92" rx="10"/>
+    <text x="1330" y="553" text-anchor="middle" class="label">Jenkins / DinD基盤</text>
+    <text x="1330" y="577" text-anchor="middle" class="detail">Compose稼働・healthy</text>
+    <text x="1330" y="598" text-anchor="middle" class="detail">永続化・配布イメージ対応</text>
+
+    <rect class="missing" x="1155" y="670" width="350" height="114" rx="10"/>
+    <text x="1330" y="703" text-anchor="middle" class="label">対象プロジェクトCI</text>
+    <text x="1330" y="727" text-anchor="middle" class="detail">Webhook → Jenkins Job API</text>
+    <text x="1330" y="748" text-anchor="middle" class="detail">Build・Lint・Test・Coverage</text>
+    <text x="1330" y="769" text-anchor="middle" class="detail">結果返却まで未実装</text>
+
+    <path class="arrow-missing" d="M1015 375 C1080 375 1080 230 1145 230"/>
+    <text x="1082" y="304" text-anchor="middle" class="edge-label">結果投稿</text>
+    <path class="arrow-missing" d="M1015 557 C1080 557 1080 385 1145 385"/>
+    <text x="1090" y="475" class="edge-label">修正反映</text>
+    <path class="arrow-missing" d="M620 247 C1060 247 1040 566 1145 566"/>
+    <text x="1050" y="548" class="edge-label">Job起動 未接続</text>
+    <path class="arrow-missing" d="M1330 612 V660"/>
+    <path class="arrow-missing" d="M1015 732 H1145"/>
+  </g>
+
+  <path class="arrow" d="M275 385 C320 385 320 247 360 247"/>
+  <text x="306" y="321" class="edge-label">Webhook</text>
+  <path class="arrow-missing" d="M1155 230 C1090 135 330 135 275 350"/>
+  <path class="arrow-missing" d="M1155 385 C1085 450 330 480 275 415"/>
+
+  <rect class="missing" x="80" y="925" width="290" height="76" rx="10"/>
+  <text x="225" y="955" text-anchor="middle" class="label">nginx</text>
+  <text x="225" y="979" text-anchor="middle" class="detail">社内NIC向けJenkins公開</text>
+
+  <rect class="missing" x="655" y="915" width="360" height="92" rx="10"/>
+  <text x="835" y="947" text-anchor="middle" class="label">プロジェクトアダプタ</text>
+  <text x="835" y="971" text-anchor="middle" class="detail">project.yaml・言語/FW設定</text>
+  <text x="835" y="992" text-anchor="middle" class="detail">Prompt / Pipelineへの設定注入</text>
+
+  <path class="arrow-missing" d="M370 963 H540 V890 H1125 V566 H1145"/>
+  <path class="arrow-support" d="M835 915 H700 V226 H745"/>
+  <path class="arrow-support" d="M1015 961 H1490 C1530 961 1530 785 1455 785"/>
+
+  <rect x="1105" y="920" width="455" height="88" rx="12" fill="#fff7ed" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="1130" y="950" class="label" fill="#9a3412">現在の到達点</text>
+  <text x="1130" y="974" class="detail">内部処理（受信 → Queue → Worker → CLI → DB）は成立。</text>
+  <text x="1130" y="995" class="detail">GitLab返却と対象CIを接続すると最小E2Eフローが完成する。</text>
+</svg>
