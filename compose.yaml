@@ -1,5 +1,11 @@
 name: ai-jenkins
 
+x-agent-environment: &agent-environment
+  DB_PATH: /data/findings.db
+  AGENT_WORKSPACE: /workspace
+  AGENT_WORKSPACE_ROOT: /workspace
+  PYTHONDONTWRITEBYTECODE: "1"
+
 services:
   docker:
     image: docker:28-dind
@@ -85,11 +91,109 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  agent-init:
+    profiles:
+      - agent
+    image: ${AGENT_IMAGE:-ai-agent:2.1.220-1}
+    user: root
+    command:
+      - bash
+      - -euc
+      - |
+        alembic upgrade head
+        chown -R node:node /data /workspace
+    environment:
+      <<: *agent-environment
+    volumes:
+      - agent-data:/data
+      - agent-workspace:/workspace
+    networks:
+      - jenkins
+    restart: "no"
+
+  webhook:
+    profiles:
+      - agent
+    image: ${AGENT_IMAGE:-ai-agent:2.1.220-1}
+    command:
+      - uvicorn
+      - Src.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    depends_on:
+      agent-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *agent-environment
+      GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET:-}
+    ports:
+      - "${WEBHOOK_HTTP_HOST:-127.0.0.1}:${WEBHOOK_HTTP_PORT:-8000}:8000"
+    volumes:
+      - agent-data:/data
+      - agent-workspace:/workspace
+    networks:
+      - jenkins
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  worker:
+    profiles:
+      - agent
+    image: ${AGENT_IMAGE:-ai-agent:2.1.220-1}
+    command:
+      - python
+      - -m
+      - Src.worker
+    depends_on:
+      agent-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *agent-environment
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-sonnet}
+      AGENT_TIMEOUT_SECONDS: ${AGENT_TIMEOUT_SECONDS:-600}
+      AGENT_MAX_ATTEMPTS: ${AGENT_MAX_ATTEMPTS:-2}
+      DISABLE_AUTOUPDATER: "1"
+    volumes:
+      - agent-data:/data
+      - agent-workspace:/workspace
+      - claude-home:/home/node
+    networks:
+      - jenkins
+    healthcheck:
+      test: ["CMD", "python", "-m", "Src.worker", "--healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
 networks:
   jenkins:
     driver: bridge
 
 volumes:
+  agent-data:
+  agent-workspace:
+  claude-home:
   jenkins-cacerts:
   jenkins-docker-certs:
   jenkins-docker-data:

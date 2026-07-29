@@ -54,6 +54,23 @@ docker compose exec jenkins \
 画面の案内に従い、管理者ユーザーを作成してください。必要なプラグインはイメージへ
 導入済みなので、初回画面では追加インストールをスキップできます。
 
+## Claude Code CLIエージェント
+
+Claude Pro/Maxアカウントを利用する場合はAPIキー不要です。初回だけworkerコンテナの
+Claude Codeからアカウント認証し、ログイン情報を専用Docker volumeへ保存します。
+
+```bash
+./scripts/agent-image.sh build
+docker compose --profile agent up -d --no-build --wait
+./scripts/claude-login.sh login
+./scripts/claude-login.sh status
+```
+
+対話ログインの認証情報は専用Docker volumeへ保存されます。詳しいコンテナ内での
+認証手順、疎通確認、別PCへの導入方法は
+[Claude Code CLIエージェント導入手順](Doc/CLIエージェント導入手順.md)を参照して
+ください。
+
 ## 他環境へ配布
 
 詳細は [Jenkinsを別PCへ導入する手順](Doc/Jenkins_別PC導入手順.md) を参照して
@@ -81,7 +98,8 @@ docker compose pull
 docker compose up -d --no-build
 ```
 
-Registryを利用できない場合は、現在のイメージをオフラインバンドルにできます。
+Registryを利用できない場合は、Jenkins、DinD、Claude Codeエージェントの各イメージを
+オフラインバンドルにできます。
 
 ```bash
 ./scripts/export-jenkins-bundle.sh

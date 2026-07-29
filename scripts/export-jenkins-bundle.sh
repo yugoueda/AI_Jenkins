@@ -12,16 +12,19 @@ elif [ "$#" -ne 0 ]; then
   exit 2
 fi
 
-jenkins_image="$(
-  docker compose config --images |
-    awk '$0 != "docker:28-dind" { print; exit }'
+compose_images="$(
+  docker compose --profile agent config --format json |
+    python3 -c 'import json,sys; c=json.load(sys.stdin); print(c["services"]["jenkins"]["image"]); print(c["services"]["worker"]["image"])'
 )"
-if [ -z "$jenkins_image" ]; then
-  echo "error: could not resolve JENKINS_IMAGE" >&2
+jenkins_image="$(printf '%s\n' "$compose_images" | sed -n '1p')"
+agent_image="$(printf '%s\n' "$compose_images" | sed -n '2p')"
+if [ -z "$jenkins_image" ] || [ -z "$agent_image" ]; then
+  echo "error: could not resolve JENKINS_IMAGE or AGENT_IMAGE" >&2
   exit 1
 fi
 
 docker image inspect "$jenkins_image" >/dev/null
+docker image inspect "$agent_image" >/dev/null
 docker image inspect docker:28-dind >/dev/null
 
 image_tag="${jenkins_image##*:}"
@@ -42,18 +45,30 @@ fi
 mkdir -p "$bundle_dir/jenkins/certs"
 cp compose.yaml "$bundle_dir/compose.yaml"
 cp scripts/install-jenkins-bundle.sh "$bundle_dir/install.sh"
+cp scripts/claude-login.sh "$bundle_dir/claude-login.sh"
 cp Doc/Jenkins_別PC導入手順.md "$bundle_dir/INSTALL.md"
+cp Doc/CLIエージェント導入手順.md "$bundle_dir/AGENT_INSTALL.md"
 chmod +x "$bundle_dir/install.sh"
+chmod +x "$bundle_dir/claude-login.sh"
 
 {
   echo "JENKINS_IMAGE=$jenkins_image"
+  echo "AGENT_IMAGE=$agent_image"
   echo "JENKINS_HTTP_HOST=127.0.0.1"
   echo "JENKINS_HTTP_PORT=8080"
   echo "JENKINS_JAVA_OPTS=-Xms512m -Xmx2g -Djenkins.install.runSetupWizard=true"
+  echo "WEBHOOK_HTTP_HOST=127.0.0.1"
+  echo "WEBHOOK_HTTP_PORT=8000"
+  echo "GITLAB_WEBHOOK_SECRET=change-me"
+  echo "CLAUDE_CODE_OAUTH_TOKEN="
+  echo "ANTHROPIC_API_KEY="
+  echo "CLAUDE_MODEL=sonnet"
+  echo "AGENT_TIMEOUT_SECONDS=600"
+  echo "AGENT_MAX_ATTEMPTS=2"
 } >"$bundle_dir/.env"
 
 echo "[export] Saving container images..."
-docker image save "$jenkins_image" docker:28-dind |
+docker image save "$jenkins_image" "$agent_image" docker:28-dind |
   gzip -c >"$bundle_dir/images.tar.gz"
 
 {
@@ -61,6 +76,9 @@ docker image save "$jenkins_image" docker:28-dind |
   echo "jenkins_image=$jenkins_image"
   echo "jenkins_image_id=$(docker image inspect --format '{{.Id}}' "$jenkins_image")"
   echo "jenkins_architecture=$(docker image inspect --format '{{.Architecture}}' "$jenkins_image")"
+  echo "agent_image=$agent_image"
+  echo "agent_image_id=$(docker image inspect --format '{{.Id}}' "$agent_image")"
+  echo "agent_architecture=$(docker image inspect --format '{{.Architecture}}' "$agent_image")"
   echo "docker_image=docker:28-dind"
   echo "docker_image_id=$(docker image inspect --format '{{.Id}}' docker:28-dind)"
   echo "includes_jenkins_home=$include_data"
@@ -97,8 +115,10 @@ fi
     images.tar.gz
     compose.yaml
     install.sh
+    claude-login.sh
     .env
     INSTALL.md
+    AGENT_INSTALL.md
     bundle-manifest.txt
   )
   if ((include_data == 1)); then

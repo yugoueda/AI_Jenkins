@@ -435,11 +435,11 @@ def build_diff_context(changed_files: list[str], event_type: str) -> str:
 | ステップ | 状態 | 備考 |
 |---|---|---|
 | ① | 完了 | `Src/agent/context.py` 作成済み |
-| ② | 完了 | `Src/agent/runner.py` 作成済み。CLI実機確認はWSL/コンテナ配置後 |
+| ② | 完了 | `Src/agent/runner.py` 作成済み。コンテナ内Claude Code 2.1.220と`--print`等の実オプションを確認済み |
 | ③ | 完了 | `Src/agent/prompts/review.py` 作成済み。ビルド/静的解析結果をコンテキストへ含める設計変更を反映済み |
 | ④ | 完了 | `Src/agent/prompts/fix.py` 作成済み |
 | ⑤ | 完了 | `Src/agent/prompts/unit_test.py` 作成済み |
 | ⑥ | 完了 | `Src/agent/parser.py` 作成済み |
 | ⑦ | 完了 | REVIEW / RE_REVIEW を `dispatcher.py` に実装済み |
 | ⑧ | 完了 | APPROVE / UNIT_TEST_GEN を `dispatcher.py` に実装済み |
-| ⑨ | 未実施 | Windows環境のため、`claude` CLI実行確認はWSL/コンテナ配置後 |
+| ⑨ | 一部完了 | コンテナ内CLI起動と模擬応答は確認済み。Pro/Max OAuthによる実応答は利用者の初回ログイン後に確認 |

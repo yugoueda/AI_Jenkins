@@ -8,3 +8,18 @@ services:
     build:
       context: .
       dockerfile: jenkins/Dockerfile
+
+  agent-init:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+
+  webhook:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+
+  worker:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile

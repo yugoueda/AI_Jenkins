@@ -6,17 +6,29 @@ from sqlalchemy import text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
-DB_PATH = os.getenv("DB_PATH", "./db/findings.db")
-Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-
-SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+
+def _create_engine(db_path: str):
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    return create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+
+
+DB_PATH = os.getenv("DB_PATH", "./db/findings.db")
+engine = _create_engine(DB_PATH)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def configure_database(db_path: str) -> None:
+    """Rebind database helpers. Intended for isolated tests and CLI tools."""
+    global DB_PATH, engine, SessionLocal
+    engine.dispose()
+    DB_PATH = db_path
+    engine = _create_engine(db_path)
+    SessionLocal.configure(bind=engine)
 
 
 def execute(sql: str, params: dict | None = None) -> None:

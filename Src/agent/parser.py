@@ -1,5 +1,6 @@
 import json
 import re
+import hashlib
 
 from ..db.Src import database as db
 
@@ -15,6 +16,10 @@ def parse_and_save_review(mr_id: str, raw_output: str) -> list[str]:
 
     for i, finding in enumerate(data.get("findings", []), start=1):
         finding_id = f"R{int(max_n or 0) + i}"
+        fix_patch = finding.get("fix_patch")
+        fix_patch_sha256 = (
+            hashlib.sha256(fix_patch.encode()).hexdigest() if fix_patch else None
+        )
         db.execute(
             "INSERT INTO findings "
             "(id, mr_id, source, status, file_path, line_start, line_end, "
@@ -29,8 +34,8 @@ def parse_and_save_review(mr_id: str, raw_output: str) -> list[str]:
                 "line_end": finding.get("line_end"),
                 "description": finding.get("description"),
                 "suggestion": json.dumps(finding.get("suggestion"), ensure_ascii=False),
-                "fix_patch": finding.get("fix_patch"),
-                "fix_patch_sha256": finding.get("fix_patch_sha256"),
+                "fix_patch": fix_patch,
+                "fix_patch_sha256": fix_patch_sha256,
             },
         )
         saved_ids.append(finding_id)

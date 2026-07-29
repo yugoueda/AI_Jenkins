@@ -15,6 +15,7 @@ Jenkinsコンテナを単純に `docker export` すると、named volume内の�
 
 - Jenkinsカスタムイメージ
 - Docker-in-Dockerイメージ
+- Claude Code CLIエージェントイメージ
 - Compose定義と環境設定
 - 必要な場合のみ、Jenkins homeデータ
 
@@ -89,6 +90,8 @@ cd ai-jenkins-bundle-2.568.1-1
 
 `install.sh` は内包ファイルのSHA-256検証、`docker load`、Compose起動、
 ヘルスチェックを順番に実行します。Registryへの接続やイメージのビルドは不要です。
+Claude Codeエージェントも利用する場合は、同梱された`AGENT_INSTALL.md`に従って
+導入先PCでClaude Pro/Maxアカウントへログインし、`agent`プロファイルを起動します。
 
 ## 4. ジョブ・ユーザー・認証情報も移行する場合
 
