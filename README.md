@@ -71,6 +71,11 @@ docker compose --profile agent up -d --no-build --wait
 [Claude Code CLIエージェント導入手順](Doc/CLIエージェント導入手順.md)を参照して
 ください。
 
+個人GitLab.comを使うデモでは、Webhookポートを直接インターネットへ公開せず、
+ngrokのHTTPSトンネルを使用します。認証要件と、将来社内GitLabへ移行する際の
+ネットワーク・TLS・運用上の課題は
+[デモ版 Webhook外部公開方針](Doc/デモ版_Webhook外部公開方針.md)を参照してください。
+
 ## 他環境へ配布
 
 詳細は [Jenkinsを別PCへ導入する手順](Doc/Jenkins_別PC導入手順.md) を参照して
