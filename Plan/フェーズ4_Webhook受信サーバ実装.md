@@ -41,7 +41,7 @@
 
 | ヘッダー値 | サブアクション | 振り分け先 |
 |---|---|---|
-| `Merge Request Hook` | `action: opened` | `mr_opened.handle()` |
+| `Merge Request Hook` | `action: open`（旧仕様互換で`opened`も許容） | `mr_opened.handle()` |
 | `Note Hook` | （コメント本文で判定） | `note.handle()` |
 | `Merge Request Hook` | `action: update` + `blocking_discussions_resolved: true` | `mr_updated.handle()` |
 
@@ -64,7 +64,7 @@ async def receive_webhook(
 
     if x_gitlab_event == "Merge Request Hook":
         action = payload.get("object_attributes", {}).get("action")
-        if action == "opened":
+        if action in ("open", "opened"):
             await mr_opened.handle(payload)
         elif action == "update":
             changes = payload.get("changes", {})
@@ -270,7 +270,15 @@ async def _post_error(mr_id: str, message: str) -> None:
 | ⑤ | 完了 | `Src/webhook/router.py` 作成済み |
 | ⑥ | 完了 | `/review` 処理実装済み |
 | ⑦ | 完了 | `/ai approve/reject/test` 処理実装済み |
-| ⑧ | 完了 | `MR opened` の `REVIEW` ジョブ登録実装済み |
+| ⑧ | 完了 | GitLab実仕様の`MR open`（`opened`も互換許容）の`REVIEW`ジョブ登録実装済み |
 | ⑨ | 完了 | `blocking_discussions_resolved` の `RE_REVIEW` ジョブ登録実装済み |
-| ⑩ | 完了 | エラー返信スタブ実装済み |
-| ⑪ | 未実施 | FastAPI依存未導入のWindows環境のため、WSL/コンテナ配置後に起動確認 |
+| ⑩ | 完了 | 不正構文・ID不存在・状態遷移・パッチ不整合のエラー返信スタブ実装済み |
+| ⑪ | 完了 | Docker Compose上で起動し、`/healthz`、Secret Token拒否、ngrok経由の疎通を確認済み |
+
+### 検証結果（2026年8月12日）
+
+- 全自動テスト: 42件成功
+- フェーズ4のルーター、署名、パーサー、イベントハンドラ: ステートメントカバレッジ100%
+- 稼働イメージ: `ai-agent:2.1.220-1`
+- Webhookコンテナ: `healthy`
+- 外部公開: ngrok Traffic Policyにより`POST /webhook`以外を拒否

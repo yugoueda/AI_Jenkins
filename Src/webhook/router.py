@@ -18,7 +18,9 @@ async def receive_webhook(
 
     if x_gitlab_event == "Merge Request Hook":
         action = payload.get("object_attributes", {}).get("action")
-        if action == "opened":
+        # GitLab sends `open` when an MR is created. Keep accepting `opened`
+        # for compatibility with the original phase 4 fixtures/specification.
+        if action in ("open", "opened"):
             await mr_opened.handle(payload)
         elif action == "update":
             changes = payload.get("changes", {})

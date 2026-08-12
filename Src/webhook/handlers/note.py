@@ -17,8 +17,14 @@ async def handle(payload: dict) -> None:
 
     mr = payload.get("merge_request", {})
     mr_id = str(mr.get("iid") or attrs.get("noteable_iid"))
-    command = parse(attrs.get("note", ""))
+    body = attrs.get("note", "")
+    command = parse(body)
     if command is None:
+        if body.strip().startswith(("/review", "/ai")):
+            await _post_error(
+                mr_id,
+                "/review または /ai approve|reject|test の形式で入力してください",
+            )
         return
 
     try:
@@ -37,6 +43,8 @@ async def _handle_review(mr_id: str, cmd: ReviewCommand) -> None:
 async def _handle_ai(mr_id: str, cmd: AiCommand) -> None:
     if cmd.cmd in ("approve", "reject") and not cmd.finding_id:
         raise CommandError(f"/ai {cmd.cmd} にはIDが必要です")
+    if cmd.cmd == "test" and cmd.finding_id:
+        raise CommandError("/ai test にIDは指定できません")
 
     if cmd.cmd == "approve":
         finding = _get_finding_or_error(mr_id, cmd.finding_id, required_status="OPEN")
@@ -79,4 +87,4 @@ def _get_finding_or_error(
 
 
 async def _post_error(mr_id: str, message: str) -> None:
-    await gitlab.post_comment(mr_id, f"エラー: {message}")
+    await gitlab.post_comment(mr_id, f"⚠️ エラー：{message}")
