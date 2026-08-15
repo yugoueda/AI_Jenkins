@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from ..gitlab.comments import post_comment
+from ..gitlab.comments import format_build_failure_comment, post_comment
 from ..webhook.queue import enqueue
 
 
@@ -64,6 +64,11 @@ async def receive_result(
             "lint_log": (result.lint_log or "")[-20_000:],
         }
         if build_result != "SUCCESS":
+            await post_comment(
+                result.project_id,
+                result.mr_id,
+                format_build_failure_comment(),
+            )
             enqueue(result.mr_id, "BUILD_FIX", payload)
             return {"status": "queued", "event_type": "BUILD_FIX"}
         if lint_result != "SUCCESS":

@@ -44,6 +44,12 @@ def test_successful_build_enqueues_review(isolated_database, monkeypatch) -> Non
 
 def test_failed_build_enqueues_build_fix(isolated_database, monkeypatch) -> None:
     monkeypatch.setenv("JENKINS_CALLBACK_TOKEN", "callback-secret")
+    messages = []
+
+    async def capture(project_id: str, mr_id: str, message: str) -> None:
+        messages.append((project_id, mr_id, message))
+
+    monkeypatch.setattr("Src.jenkins.callback.post_comment", capture)
 
     response = TestClient(app).post(
         "/internal/jenkins/result",
@@ -55,6 +61,8 @@ def test_failed_build_enqueues_build_fix(isolated_database, monkeypatch) -> None
     assert isolated_database.query_scalar(
         "SELECT event_type FROM job_queue"
     ) == "BUILD_FIX"
+    assert messages[0][:2] == ("42", "7")
+    assert "## ❌ ビルドに失敗しました" in messages[0][2]
 
 
 def test_lint_failure_posts_comment_without_queue(

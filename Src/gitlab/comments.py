@@ -5,6 +5,35 @@ from ..db.Src import database as db
 from .client import project_path, request
 
 
+def format_ai_review_usage_comment() -> str:
+    return """\
+## AIレビューの使い方
+
+このMRでは、ビルドと静的解析の成功後にAIレビューが自動で始まります。
+必要に応じて、MRコメントで次のコマンドを実行できます。
+
+| コマンド | 動作 |
+|---|---|
+| `/ai review` | AIレビューを手動で開始 |
+| `/ai test` | ユニットテストの生成と実行を開始 |
+| `/ai apply <指摘ID>` | 修正案の差分を表示 |
+| `/ai approve <指摘ID>` | 修正案をソースブランチへコミット |
+| `/ai reject <指摘ID>` | 指摘を却下 |
+
+`apply`、`approve`、`reject`には、AIレビュー結果に表示される指摘ID（例: `R1`）を指定してください。
+コマンドの実行にはGitLabプロジェクトのDeveloper以上の権限が必要です。
+"""
+
+
+def format_build_failure_comment() -> str:
+    return """\
+## ❌ ビルドに失敗しました
+
+Jenkinsのビルドが失敗しました。AIが原因と修正案を解析しています。
+解析が完了すると、このMRへ追加のコメントを投稿します。
+"""
+
+
 def _suggestion_text(raw: str | None) -> str:
     if not raw:
         return "（修正提案なし）"

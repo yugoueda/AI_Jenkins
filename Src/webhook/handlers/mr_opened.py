@@ -1,4 +1,4 @@
-from ...gitlab.comments import post_comment
+from ...gitlab.comments import format_ai_review_usage_comment, post_comment
 from ...jenkins.client import JenkinsError, trigger_build
 
 
@@ -14,6 +14,11 @@ async def handle(payload: dict) -> None:
         payload.get("project", {}).get("git_http_url")
         or payload.get("repository", {}).get("git_http_url")
         or ""
+    )
+    await post_comment(
+        project_id,
+        mr_id,
+        format_ai_review_usage_comment(),
     )
     try:
         await trigger_build(

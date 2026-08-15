@@ -26,11 +26,16 @@ def _mr_payload(action: str) -> dict:
 def test_mr_open_event_triggers_jenkins(isolated_database, monkeypatch) -> None:
     monkeypatch.setenv("GITLAB_WEBHOOK_SECRET", "test-secret")
     calls = []
+    comments = []
 
     async def trigger(**kwargs):
         calls.append(kwargs)
 
+    async def comment(project_id, mr_id, message):
+        comments.append((project_id, mr_id, message))
+
     monkeypatch.setattr("Src.webhook.handlers.mr_opened.trigger_build", trigger)
+    monkeypatch.setattr("Src.webhook.handlers.mr_opened.post_comment", comment)
 
     response = TestClient(app).post(
         "/webhook", headers=_headers(), json=_mr_payload("open")
@@ -48,6 +53,8 @@ def test_mr_open_event_triggers_jenkins(isolated_database, monkeypatch) -> None:
             "repository_url": "",
         }
     ]
+    assert comments[0][:2] == ("42", "7")
+    assert "## AIレビューの使い方" in comments[0][2]
     assert isolated_database.query_scalar("SELECT COUNT(*) FROM job_queue") == 0
 
 
@@ -58,7 +65,11 @@ def test_legacy_mr_opened_event_is_accepted(isolated_database, monkeypatch) -> N
     async def trigger(**kwargs):
         calls.append(kwargs)
 
+    async def comment(*args):
+        return None
+
     monkeypatch.setattr("Src.webhook.handlers.mr_opened.trigger_build", trigger)
+    monkeypatch.setattr("Src.webhook.handlers.mr_opened.post_comment", comment)
 
     response = TestClient(app).post(
         "/webhook", headers=_headers(), json=_mr_payload("opened")

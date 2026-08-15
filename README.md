@@ -95,6 +95,9 @@ JENKINS_CALLBACK_TOKEN=<random internal token>
 
 Flutter参照プロジェクトのBuild/Lint/Testは、標準Flutterイメージで実行します。
 ビルド対象はWebのみで、`flutter build web`を使用します。
+MR作成時には利用可能な`/ai`コマンドをMRコメントで案内します。ビルドに失敗した場合は
+即時に失敗を通知し、workerによる解析完了後に原因と修正案を追加コメントします。
+GitLab WebhookではMerge request eventsとNote eventsの両方を有効にしてください。
 
 新規Jenkins環境では次のPipelineジョブがイメージ初期化時に自動作成されます。
 

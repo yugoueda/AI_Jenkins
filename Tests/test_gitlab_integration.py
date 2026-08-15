@@ -3,9 +3,32 @@ from pathlib import Path
 
 import httpx
 
-from Src.gitlab.comments import format_review_comment
+from Src.gitlab.comments import (
+    format_ai_review_usage_comment,
+    format_build_failure_comment,
+    format_review_comment,
+)
 from Src.gitlab.commits import PatchError, commit_patch
 from Src.gitlab.discussions import all_discussions_resolved
+
+
+def test_ai_review_usage_comment_lists_supported_commands() -> None:
+    comment = format_ai_review_usage_comment()
+
+    assert "## AIレビューの使い方" in comment
+    assert "`/ai review`" in comment
+    assert "`/ai test`" in comment
+    assert "`/ai apply <指摘ID>`" in comment
+    assert "`/ai approve <指摘ID>`" in comment
+    assert "`/ai reject <指摘ID>`" in comment
+    assert "Developer以上" in comment
+
+
+def test_build_failure_comment_explains_follow_up() -> None:
+    comment = format_build_failure_comment()
+
+    assert "## ❌ ビルドに失敗しました" in comment
+    assert "AIが原因と修正案を解析しています" in comment
 
 
 def test_review_comment_contains_finding_details() -> None:
