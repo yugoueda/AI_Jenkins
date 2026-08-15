@@ -13,3 +13,8 @@ def isolated_database(tmp_path: Path):
     Base.metadata.create_all(db.engine)
     yield db
     db.engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def disable_live_gitlab_role_checks(monkeypatch):
+    monkeypatch.setenv("GITLAB_ENFORCE_COMMAND_ROLES", "false")

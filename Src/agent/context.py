@@ -6,10 +6,18 @@ def build_diff_context(
     changed_files: list[str],
     event_type: str,
     working_directory: str | None = None,
+    target_branch: str = "main",
 ) -> str:
     cwd = Path(working_directory).resolve() if working_directory else Path.cwd()
     result = subprocess.run(
-        ["git", "diff", "-W", "origin/main...HEAD", "--", *changed_files],
+        [
+            "git",
+            "diff",
+            "-W",
+            f"origin/{target_branch}...HEAD",
+            "--",
+            *changed_files,
+        ],
         capture_output=True,
         text=True,
         check=False,

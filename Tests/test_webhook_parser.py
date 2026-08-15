@@ -17,8 +17,10 @@ from Src.webhook.parser import AiCommand, ReviewCommand, parse
             ),
         ),
         ("/ai approve R1", AiCommand("approve", "R1")),
+        ("/ai apply R1", AiCommand("apply", "R1")),
         ("/ai reject R2", AiCommand("reject", "R2")),
         ("/ai test", AiCommand("test", None)),
+        ("/ai review", AiCommand("review", None)),
     ],
 )
 def test_parse_supported_commands(body, expected) -> None:

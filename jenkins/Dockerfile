@@ -24,6 +24,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=jenkins:jenkins jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
+COPY --chown=jenkins:jenkins jenkins/Jenkinsfile.build jenkins/Jenkinsfile.test /usr/share/jenkins/ref/ai-review/
+COPY --chown=jenkins:jenkins jenkins/init.groovy.d/ /usr/share/jenkins/ref/init.groovy.d/
 
 USER jenkins
 

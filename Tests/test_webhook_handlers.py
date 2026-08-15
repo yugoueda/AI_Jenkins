@@ -6,11 +6,16 @@ from Src.webhook.handlers import mr_updated, note
 
 def _note_payload(body: str, mr_id: int = 7) -> dict:
     return {
+        "project": {"id": 42, "git_http_url": "https://gitlab.example/repo.git"},
         "object_attributes": {
             "noteable_type": "MergeRequest",
             "note": body,
         },
-        "merge_request": {"iid": mr_id},
+        "merge_request": {
+            "iid": mr_id,
+            "source_branch": "feature/example",
+            "target_branch": "main",
+        },
     }
 
 
@@ -75,8 +80,8 @@ def test_command_errors_are_posted_to_gitlab(
 ) -> None:
     messages: list[tuple[str, str]] = []
 
-    async def capture_comment(mr_id: str, message: str) -> None:
-        messages.append((mr_id, message))
+    async def capture_comment(project_id: str, mr_id: str, message: str) -> None:
+        messages.append((project_id, mr_id, message))
 
     monkeypatch.setattr(note.gitlab, "post_comment", capture_comment)
 
@@ -85,11 +90,12 @@ def test_command_errors_are_posted_to_gitlab(
     asyncio.run(note.handle(_note_payload("/ai unknown")))
 
     assert messages == [
-        ("7", "⚠️ エラー：R404 は存在しません"),
-        ("7", "⚠️ エラー：/ai test にIDは指定できません"),
+        ("42", "7", "⚠️ エラー：R404 は存在しません"),
+        ("42", "7", "⚠️ エラー：/ai test にIDは指定できません"),
         (
+            "42",
             "7",
-            "⚠️ エラー：/review または /ai approve|reject|test の形式で入力してください",
+            "⚠️ エラー：/review または /ai apply|approve|reject|test|review の形式で入力してください",
         ),
     ]
 
@@ -109,7 +115,7 @@ def test_approve_validation_errors_are_posted(
     )
     messages: list[str] = []
 
-    async def capture_comment(mr_id: str, message: str) -> None:
+    async def capture_comment(project_id: str, mr_id: str, message: str) -> None:
         messages.append(message)
 
     monkeypatch.setattr(note.gitlab, "post_comment", capture_comment)
@@ -132,7 +138,7 @@ def test_approve_rejects_invalid_patch_hash(
     _insert_finding(isolated_database, patch_hash="invalid")
     messages: list[str] = []
 
-    async def capture_comment(mr_id: str, message: str) -> None:
+    async def capture_comment(project_id: str, mr_id: str, message: str) -> None:
         messages.append(message)
 
     monkeypatch.setattr(note.gitlab, "post_comment", capture_comment)
@@ -165,7 +171,7 @@ def test_review_and_non_command_comments_are_noops(
 ) -> None:
     messages: list[str] = []
 
-    async def capture_comment(mr_id: str, message: str) -> None:
+    async def capture_comment(project_id: str, mr_id: str, message: str) -> None:
         messages.append(message)
 
     monkeypatch.setattr(note.gitlab, "post_comment", capture_comment)
@@ -182,7 +188,7 @@ def test_non_merge_request_note_is_ignored(
 ) -> None:
     messages: list[str] = []
 
-    async def capture_comment(mr_id: str, message: str) -> None:
+    async def capture_comment(project_id: str, mr_id: str, message: str) -> None:
         messages.append(message)
 
     monkeypatch.setattr(note.gitlab, "post_comment", capture_comment)
@@ -192,4 +198,26 @@ def test_non_merge_request_note_is_ignored(
     asyncio.run(note.handle(payload))
 
     assert messages == []
+    assert isolated_database.query_scalar("SELECT COUNT(*) FROM job_queue") == 0
+
+
+def test_ai_command_requires_developer_role(isolated_database, monkeypatch) -> None:
+    monkeypatch.setenv("GITLAB_ENFORCE_COMMAND_ROLES", "true")
+    payload = _note_payload("/ai test")
+    payload["user"] = {"id": 99}
+    messages = []
+
+    async def denied(project_id: str, user_id: str) -> bool:
+        assert (project_id, user_id) == ("42", "99")
+        return False
+
+    async def capture_comment(project_id: str, mr_id: str, message: str) -> None:
+        messages.append(message)
+
+    monkeypatch.setattr(note.gitlab, "user_can_operate", denied)
+    monkeypatch.setattr(note.gitlab, "post_comment", capture_comment)
+
+    asyncio.run(note.handle(payload))
+
+    assert messages == ["⚠️ エラー：このコマンドにはDeveloper以上の権限が必要です"]
     assert isolated_database.query_scalar("SELECT COUNT(*) FROM job_queue") == 0

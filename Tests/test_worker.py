@@ -50,10 +50,20 @@ def test_worker_runs_review_through_cli(
         "build_review_prompt_with_ci",
         lambda *args, **kwargs: "review prompt",
     )
+    posted = []
+
+    async def post_review(project_id: str, mr_id: str, finding_ids: list[str]):
+        posted.append((project_id, mr_id, finding_ids))
+
+    monkeypatch.setattr(dispatcher.gitlab_comments, "post_review_findings", post_review)
     job_id = enqueue(
         "20",
         "REVIEW",
-        {"workspace_path": str(tmp_path), "changed_files": []},
+        {
+            "project_id": "42",
+            "workspace_path": str(tmp_path),
+            "changed_files": [],
+        },
     )
 
     assert asyncio.run(worker.process_once())
@@ -64,3 +74,4 @@ def test_worker_runs_review_through_cli(
     assert isolated_database.query_scalar(
         "SELECT COUNT(*) FROM findings WHERE mr_id='20'"
     ) == 0
+    assert posted == [("42", "20", [])]

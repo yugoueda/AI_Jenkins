@@ -52,3 +52,10 @@ src/gitlab/
 | 5 | commit APIまたはgit pushによる修正コミット処理を実装 | 6-3 |
 | 6 | Webhook handler / dispatcher からGitLab連携を呼び出す | 6-1〜6-3 |
 
+### 実装結果（2026-08-15）
+
+- `Src/gitlab/` に共通HTTPクライアント、コメント、Discussions、権限確認、Commits API連携を実装
+- AIレビュー結果を設計書 §7.2 のMarkdown形式でMRへ投稿
+- `/ai apply` は保存済み差分を提示し、`/ai approve` はハッシュを再検証してCommits APIで反映
+- AIコマンドはGitLab Developer以上に制限（`GITLAB_ENFORCE_COMMAND_ROLES=true`が既定）
+- 単体テストはモックAPIで確認済み。実GitLabとの疎通確認は接続情報設定後に実施する

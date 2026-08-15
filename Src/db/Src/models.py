@@ -48,7 +48,8 @@ class JobQueue(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "event_type IN ('REVIEW', 'APPROVE', 'RE_REVIEW', 'UNIT_TEST_GEN')",
+            "event_type IN ('BUILD_FIX', 'REVIEW', 'APPLY', 'APPROVE', "
+            "'RE_REVIEW', 'UNIT_TEST_GEN')",
             name="ck_job_queue_event_type",
         ),
         CheckConstraint(

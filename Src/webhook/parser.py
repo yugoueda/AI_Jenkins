@@ -8,7 +8,7 @@ REVIEW_PATTERN = re.compile(
     re.DOTALL,
 )
 AI_PATTERN = re.compile(
-    r"^/ai\s+(?P<cmd>approve|reject|test)(?:\s+(?P<id>\w+))?$",
+    r"^/ai\s+(?P<cmd>apply|approve|reject|test|review)(?:\s+(?P<id>\w+))?$",
 )
 
 
@@ -21,7 +21,7 @@ class ReviewCommand:
 
 @dataclass(frozen=True)
 class AiCommand:
-    cmd: Literal["approve", "reject", "test"]
+    cmd: Literal["apply", "approve", "reject", "test", "review"]
     finding_id: str | None
 
 

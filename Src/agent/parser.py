@@ -10,8 +10,7 @@ def parse_and_save_review(mr_id: str, raw_output: str) -> list[str]:
     saved_ids: list[str] = []
     max_n = db.query_scalar(
         "SELECT COALESCE(MAX(CAST(SUBSTR(id, 2) AS INTEGER)), 0) "
-        "FROM findings WHERE mr_id=:mr_id AND source='AI'",
-        {"mr_id": mr_id},
+        "FROM findings WHERE source='AI'",
     )
 
     for i, finding in enumerate(data.get("findings", []), start=1):
@@ -56,5 +55,10 @@ def parse_and_save_unit_tests(mr_id: str, raw_output: str) -> list[tuple[str, st
             continue
         first_line, _, rest = block.partition("\n")
         file_path = first_line.removeprefix("// ").strip()
-        results.append((file_path, rest.strip()))
+        content = rest.strip()
+        if content.startswith("```"):
+            _, _, content = content.partition("\n")
+            if content.endswith("```"):
+                content = content[:-3].rstrip()
+        results.append((file_path, content))
     return results

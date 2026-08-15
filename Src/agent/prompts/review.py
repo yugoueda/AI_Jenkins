@@ -38,11 +38,13 @@ def build_review_prompt(
     mr_id: str,
     changed_files: list[str],
     working_directory: str | None = None,
+    target_branch: str = "main",
 ) -> str:
     diff_context = build_diff_context(
         changed_files,
         event_type="REVIEW",
         working_directory=working_directory,
+        target_branch=target_branch,
     )
     return f"{REVIEW_SYSTEM}\n\nMR ID: {mr_id}\n\n## レビュー対象diff+周辺実装\n\n{diff_context}"
 
@@ -53,8 +55,14 @@ def build_review_prompt_with_ci(
     build_result: str | None = None,
     lint_result: str | None = None,
     working_directory: str | None = None,
+    target_branch: str = "main",
 ) -> str:
-    prompt = build_review_prompt(mr_id, changed_files, working_directory)
+    prompt = build_review_prompt(
+        mr_id,
+        changed_files,
+        working_directory,
+        target_branch,
+    )
     return (
         f"{prompt}\n\n"
         f"## ビルド結果\n{build_result or '（ビルド結果なし）'}\n\n"

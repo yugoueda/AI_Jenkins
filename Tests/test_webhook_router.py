@@ -23,8 +23,14 @@ def _mr_payload(action: str) -> dict:
     }
 
 
-def test_mr_open_event_enqueues_review(isolated_database, monkeypatch) -> None:
+def test_mr_open_event_triggers_jenkins(isolated_database, monkeypatch) -> None:
     monkeypatch.setenv("GITLAB_WEBHOOK_SECRET", "test-secret")
+    calls = []
+
+    async def trigger(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr("Src.webhook.handlers.mr_opened.trigger_build", trigger)
 
     response = TestClient(app).post(
         "/webhook", headers=_headers(), json=_mr_payload("open")
@@ -32,29 +38,34 @@ def test_mr_open_event_enqueues_review(isolated_database, monkeypatch) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    row = isolated_database.query_one(
-        "SELECT mr_id, event_type, status, payload FROM job_queue"
-    )
-    assert row is not None
-    assert (row["mr_id"], row["event_type"], row["status"]) == (
-        "7",
-        "REVIEW",
-        "WAITING",
-    )
-    assert '"project_id": "42"' in row["payload"]
+    assert calls == [
+        {
+            "project_id": "42",
+            "mr_id": "7",
+            "source_branch": "feature/example",
+            "target_branch": "main",
+            "commit_sha": "",
+            "repository_url": "",
+        }
+    ]
+    assert isolated_database.query_scalar("SELECT COUNT(*) FROM job_queue") == 0
 
 
 def test_legacy_mr_opened_event_is_accepted(isolated_database, monkeypatch) -> None:
     monkeypatch.setenv("GITLAB_WEBHOOK_SECRET", "test-secret")
+    calls = []
+
+    async def trigger(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr("Src.webhook.handlers.mr_opened.trigger_build", trigger)
 
     response = TestClient(app).post(
         "/webhook", headers=_headers(), json=_mr_payload("opened")
     )
 
     assert response.status_code == 200
-    assert isolated_database.query_scalar(
-        "SELECT COUNT(*) FROM job_queue WHERE event_type='REVIEW'"
-    ) == 1
+    assert len(calls) == 1
 
 
 def test_invalid_token_does_not_enqueue(isolated_database, monkeypatch) -> None:
@@ -112,11 +123,12 @@ def test_unhandled_event_returns_ok_without_enqueue(
 def test_note_event_dispatches_command(isolated_database, monkeypatch) -> None:
     monkeypatch.setenv("GITLAB_WEBHOOK_SECRET", "test-secret")
     payload = {
+        "project": {"id": 42},
         "object_attributes": {
             "noteable_type": "MergeRequest",
             "note": "/ai test",
         },
-        "merge_request": {"iid": 7},
+        "merge_request": {"iid": 7, "source_branch": "feature/example"},
     }
 
     response = TestClient(app).post(

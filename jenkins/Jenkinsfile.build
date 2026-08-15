@@ -1,0 +1,93 @@
+import groovy.json.JsonOutput
+
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'PROJECT_ID', defaultValue: '', description: 'GitLab project ID')
+        string(name: 'MR_IID', defaultValue: '', description: 'GitLab MR IID')
+        string(name: 'SOURCE_BRANCH', defaultValue: '', description: 'Source branch')
+        string(name: 'TARGET_BRANCH', defaultValue: '', description: 'Target branch')
+        string(name: 'COMMIT_SHA', defaultValue: '', description: 'Commit SHA')
+        string(name: 'REPOSITORY_URL', defaultValue: '', description: 'Git repository URL')
+    }
+
+    environment {
+        BUILD_STAGE_RESULT = 'NOT_RUN'
+        LINT_STAGE_RESULT = 'NOT_RUN'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: params.SOURCE_BRANCH,
+                    credentialsId: env.GITLAB_CREDENTIALS_ID,
+                    url: params.REPOSITORY_URL
+            }
+        }
+        stage('Build') {
+            steps {
+                script {
+                    def status = sh(
+                        script: "${env.BUILD_COMMAND} > .ai-build.log 2>&1",
+                        returnStatus: true
+                    )
+                    sh 'cat .ai-build.log'
+                    if (status == 0) {
+                        env.BUILD_STAGE_RESULT = 'SUCCESS'
+                    } else {
+                        env.BUILD_STAGE_RESULT = 'FAILED'
+                        currentBuild.result = 'FAILURE'
+                    }
+                }
+            }
+        }
+        stage('Lint') {
+            when { expression { env.BUILD_STAGE_RESULT == 'SUCCESS' } }
+            steps {
+                script {
+                    def status = sh(
+                        script: "${env.LINT_COMMAND} > .ai-lint.log 2>&1",
+                        returnStatus: true
+                    )
+                    sh 'cat .ai-lint.log'
+                    if (status == 0) {
+                        env.LINT_STAGE_RESULT = 'SUCCESS'
+                    } else {
+                        env.LINT_STAGE_RESULT = 'FAILED'
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                def payload = JsonOutput.toJson([
+                    pipeline: 'BUILD',
+                    project_id: params.PROJECT_ID,
+                    mr_id: params.MR_IID,
+                    source_branch: params.SOURCE_BRANCH,
+                    target_branch: params.TARGET_BRANCH,
+                    commit_sha: params.COMMIT_SHA,
+                    repository_url: params.REPOSITORY_URL,
+                    build_result: env.BUILD_STAGE_RESULT,
+                    build_log: fileExists('.ai-build.log') ? readFile('.ai-build.log').takeRight(20000) : '',
+                    lint_result: env.LINT_STAGE_RESULT,
+                    lint_log: fileExists('.ai-lint.log') ? readFile('.ai-lint.log').takeRight(20000) : ''
+                ])
+                writeFile file: '.ai-review-callback.json', text: payload
+                sh '''
+                    set +x
+                    curl --fail --silent --show-error \
+                      -H "Content-Type: application/json" \
+                      -H "X-Internal-Token: ${JENKINS_CALLBACK_TOKEN}" \
+                      --data-binary @.ai-review-callback.json \
+                      "${WEBHOOK_INTERNAL_URL}/internal/jenkins/result"
+                '''
+            }
+        }
+    }
+}

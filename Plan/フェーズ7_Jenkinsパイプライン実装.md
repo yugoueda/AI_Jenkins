@@ -56,3 +56,14 @@ jenkins/
 | 4 | Webhook受信サーバからJenkins build APIを呼ぶ処理を実装 | 7-3 |
 | 5 | カバレッジ結果投稿スクリプトを作成 | 7-2 / 7-4 |
 | 6 | Jenkinsジョブの成功・失敗時コメントを確認 | 7-1〜7-4 |
+
+### 実装結果（2026-08-15）
+
+- `jenkins/Jenkinsfile.build` と `jenkins/Jenkinsfile.test` を追加
+- MR作成WebhookからJenkins `buildWithParameters` APIを呼び出すクライアントを実装
+- Jenkinsから `POST /internal/jenkins/result` へ結果を返し、内部共有トークンを検証
+- Build失敗は `BUILD_FIX`、Build/Lint成功は `REVIEW` をキュー登録し、Lint失敗はMRへ通知
+- 再レビュー指摘なし → テスト生成 → GitLabへ生成テストをコミット → Jenkinsテストジョブ起動を接続
+- LCOVのC0/C1計算・未実行行抽出処理を追加
+- 新規Jenkins環境では2つのPipelineジョブをinit Groovyで自動作成する
+- 実サービス疎通確認は、接続情報・Credential設定後に実施する

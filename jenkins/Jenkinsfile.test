@@ -1,0 +1,108 @@
+import groovy.json.JsonOutput
+
+def parseLcov(String path) {
+    long totalLines = 0
+    long hitLines = 0
+    long totalBranches = 0
+    long hitBranches = 0
+    readFile(path).readLines().each { line ->
+        if (line.startsWith('DA:')) {
+            def parts = line.substring(3).tokenize(',')
+            totalLines++
+            if (parts[1].toInteger() > 0) hitLines++
+        } else if (line.startsWith('BRDA:')) {
+            def parts = line.substring(5).tokenize(',')
+            totalBranches++
+            if (parts[3] != '-' && parts[3].toInteger() > 0) hitBranches++
+        }
+    }
+    return [
+        c0: totalLines ? hitLines * 100.0 / totalLines : 100.0,
+        c1: totalBranches ? hitBranches * 100.0 / totalBranches : 100.0
+    ]
+}
+
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'PROJECT_ID', defaultValue: '', description: 'GitLab project ID')
+        string(name: 'MR_IID', defaultValue: '', description: 'GitLab MR IID')
+        string(name: 'SOURCE_BRANCH', defaultValue: '', description: 'Source branch')
+        string(name: 'REPOSITORY_URL', defaultValue: '', description: 'Git repository URL')
+        string(name: 'C0_TARGET', defaultValue: '80', description: 'C0 target')
+        string(name: 'C1_TARGET', defaultValue: '70', description: 'C1 target')
+    }
+
+    environment {
+        TEST_STAGE_RESULT = 'NOT_RUN'
+        FINAL_C0 = ''
+        FINAL_C1 = ''
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: params.SOURCE_BRANCH,
+                    credentialsId: env.GITLAB_CREDENTIALS_ID,
+                    url: params.REPOSITORY_URL
+            }
+        }
+        stage('Test and coverage') {
+            steps {
+                script {
+                    int attempts = 0
+                    while (attempts < 2 && env.TEST_STAGE_RESULT != 'SUCCESS') {
+                        attempts++
+                        def status = sh(
+                            script: "${env.TEST_COMMAND} > .ai-test.log 2>&1",
+                            returnStatus: true
+                        )
+                        sh 'cat .ai-test.log'
+                        if (status == 0) {
+                            env.TEST_STAGE_RESULT = 'SUCCESS'
+                        } else {
+                            env.TEST_STAGE_RESULT = 'FAILED'
+                        }
+                    }
+                    if (env.TEST_STAGE_RESULT == 'SUCCESS') {
+                        def coverage = parseLcov(env.COVERAGE_REPORT_PATH ?: 'coverage/lcov.info')
+                        env.FINAL_C0 = coverage.c0.toString()
+                        env.FINAL_C1 = coverage.c1.toString()
+                        if (coverage.c0 < params.C0_TARGET.toFloat() || coverage.c1 < params.C1_TARGET.toFloat()) {
+                            currentBuild.result = 'UNSTABLE'
+                        }
+                    } else {
+                        currentBuild.result = 'FAILURE'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                def payload = JsonOutput.toJson([
+                    pipeline: 'TEST',
+                    project_id: params.PROJECT_ID,
+                    mr_id: params.MR_IID,
+                    source_branch: params.SOURCE_BRANCH,
+                    test_result: env.TEST_STAGE_RESULT,
+                    test_log: fileExists('.ai-test.log') ? readFile('.ai-test.log').takeRight(10000) : '',
+                    c0: env.FINAL_C0 ? env.FINAL_C0.toFloat() : null,
+                    c1: env.FINAL_C1 ? env.FINAL_C1.toFloat() : null
+                ])
+                writeFile file: '.ai-review-callback.json', text: payload
+                sh '''
+                    set +x
+                    curl --fail --silent --show-error \
+                      -H "Content-Type: application/json" \
+                      -H "X-Internal-Token: ${JENKINS_CALLBACK_TOKEN}" \
+                      --data-binary @.ai-review-callback.json \
+                      "${WEBHOOK_INTERNAL_URL}/internal/jenkins/result"
+                '''
+            }
+        }
+    }
+}

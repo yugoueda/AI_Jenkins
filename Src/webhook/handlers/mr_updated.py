@@ -1,4 +1,4 @@
-from .. import gitlab_stub as gitlab
+from ... import gitlab
 from ..queue import enqueue
 
 
@@ -13,6 +13,9 @@ async def handle(payload: dict) -> None:
         "RE_REVIEW",
         {
             "project_id": project_id,
+            "source_branch": attrs.get("source_branch"),
+            "target_branch": attrs.get("target_branch"),
+            "repository_url": payload.get("project", {}).get("git_http_url", ""),
             "changed_files": [],
             "build_result": payload.get("build_result"),
             "lint_result": payload.get("lint_result"),

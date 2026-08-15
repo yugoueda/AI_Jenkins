@@ -6,7 +6,19 @@ from sqlalchemy import text
 from ..db.Src import database as db
 
 
+SUPPORTED_EVENT_TYPES = {
+    "BUILD_FIX",
+    "REVIEW",
+    "APPLY",
+    "APPROVE",
+    "RE_REVIEW",
+    "UNIT_TEST_GEN",
+}
+
+
 def enqueue(mr_id: str, event_type: str, payload: dict) -> str:
+    if event_type not in SUPPORTED_EVENT_TYPES:
+        raise ValueError(f"unsupported event_type: {event_type}")
     job_id = str(uuid.uuid4())
     db.execute(
         "INSERT INTO job_queue (job_id, mr_id, event_type, payload, status, created_at) "

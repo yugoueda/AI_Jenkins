@@ -27,11 +27,13 @@ def build_unit_test_prompt(
     changed_files: list[str],
     uncovered_lines: dict[str, list[int]],
     working_directory: str | None = None,
+    target_branch: str = "main",
 ) -> str:
     diff_context = build_diff_context(
         changed_files,
         event_type="UNIT_TEST_GEN",
         working_directory=working_directory,
+        target_branch=target_branch,
     )
     coverage_str = "\n".join(
         f"{path}:{','.join(map(str, lines))}"

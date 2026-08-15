@@ -76,6 +76,30 @@ ngrokのHTTPSトンネルを使用します。認証要件と、将来社内GitL
 ネットワーク・TLS・運用上の課題は
 [デモ版 Webhook外部公開方針](Doc/デモ版_Webhook外部公開方針.md)を参照してください。
 
+### Webhook以降の連携設定
+
+MR作成後の処理は `GitLab → webhook → Jenkins build → webhook callback →
+job_queue → worker → GitLab` の順で動作します。`.env`には少なくとも次を設定します。
+
+```dotenv
+GITLAB_URL=https://gitlab.example.com
+GITLAB_TOKEN=<API token>
+JENKINS_USER=<Jenkins user>
+JENKINS_TOKEN=<Jenkins API token>
+JENKINS_BUILD_JOB=ai-review-build
+JENKINS_TEST_JOB=ai-review-test
+JENKINS_CALLBACK_TOKEN=<random internal token>
+```
+
+新規Jenkins環境では次のPipelineジョブがイメージ初期化時に自動作成されます。
+
+- `ai-review-build`: `jenkins/Jenkinsfile.build`
+- `ai-review-test`: `jenkins/Jenkinsfile.test`
+
+GitLab用Credential IDは既定で`gitlab-token`です。別名を使う場合は
+`GITLAB_CREDENTIALS_ID`を変更してください。Jenkinsコールバック先はCompose内部の
+`http://webhook:8000`で、外部公開しません。
+
 ## 他環境へ配布
 
 詳細は [Jenkinsを別PCへ導入する手順](Doc/Jenkins_別PC導入手順.md) を参照して
