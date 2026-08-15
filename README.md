@@ -75,6 +75,8 @@ docker compose --profile agent up -d --no-build --wait
 ngrokのHTTPSトンネルを使用します。認証要件と、将来社内GitLabへ移行する際の
 ネットワーク・TLS・運用上の課題は
 [デモ版 Webhook外部公開方針](Doc/デモ版_Webhook外部公開方針.md)を参照してください。
+日常的な起動、Flutterイメージの準備、ngrok接続、疎通確認、停止については
+[デモ環境の再開・停止手順](Doc/デモ環境_再開・停止手順.md)にまとめています。
 
 ### Webhook以降の連携設定
 
@@ -90,6 +92,9 @@ JENKINS_BUILD_JOB=ai-review-build
 JENKINS_TEST_JOB=ai-review-test
 JENKINS_CALLBACK_TOKEN=<random internal token>
 ```
+
+Flutter参照プロジェクトのBuild/Lint/Testは、標準Flutterイメージで実行します。
+ビルド対象はWebのみで、`flutter build web`を使用します。
 
 新規Jenkins環境では次のPipelineジョブがイメージ初期化時に自動作成されます。
 
@@ -147,7 +152,7 @@ docker compose ps
 docker compose logs -f jenkins
 
 # 停止（データは保持）
-docker compose down
+docker compose --profile agent down
 
 # 配布済みイメージへ更新
 docker compose pull

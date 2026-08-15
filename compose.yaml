@@ -75,6 +75,7 @@ services:
       JENKINS_OPTS: --httpListenAddress=0.0.0.0 --httpPort=8080
       JENKINS_CALLBACK_TOKEN: ${JENKINS_CALLBACK_TOKEN:-}
       WEBHOOK_INTERNAL_URL: http://webhook:8000
+      CI_IMAGE: ${CI_IMAGE:-}
       BUILD_COMMAND: ${BUILD_COMMAND:-python -m compileall -q .}
       LINT_COMMAND: ${LINT_COMMAND:-python -m pytest -q}
       TEST_COMMAND: ${TEST_COMMAND:-python -m pytest --cov --cov-report=xml}

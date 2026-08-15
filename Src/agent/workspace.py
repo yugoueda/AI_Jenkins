@@ -87,8 +87,8 @@ def prepare_workspace(payload: dict, mr_id: str) -> str:
             "fetch",
             "--prune",
             "origin",
-            f"{source_branch}:refs/remotes/origin/{source_branch}",
-            f"{target_branch}:refs/remotes/origin/{target_branch}",
+            f"+refs/heads/{source_branch}:refs/remotes/origin/{source_branch}",
+            f"+refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
         ],
     )
     _run(workspace, ["checkout", "-B", source_branch, f"origin/{source_branch}"])

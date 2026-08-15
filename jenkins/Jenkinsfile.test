@@ -34,12 +34,6 @@ pipeline {
         string(name: 'C1_TARGET', defaultValue: '70', description: 'C1 target')
     }
 
-    environment {
-        TEST_STAGE_RESULT = 'NOT_RUN'
-        FINAL_C0 = ''
-        FINAL_C1 = ''
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -54,8 +48,13 @@ pipeline {
                     int attempts = 0
                     while (attempts < 2 && env.TEST_STAGE_RESULT != 'SUCCESS') {
                         attempts++
+                        def testCommand = env.CI_IMAGE?.trim()
+                            ? "docker run --rm -v \"${env.WORKSPACE}:/workspace\" " +
+                              "-v ai-flutter-pub-cache:/root/.pub-cache " +
+                              "-w /workspace ${env.CI_IMAGE} sh -lc '${env.TEST_COMMAND}'"
+                            : env.TEST_COMMAND
                         def status = sh(
-                            script: "${env.TEST_COMMAND} > .ai-test.log 2>&1",
+                            script: "${testCommand} > .ai-test.log 2>&1",
                             returnStatus: true
                         )
                         sh 'cat .ai-test.log'
@@ -83,13 +82,17 @@ pipeline {
     post {
         always {
             script {
+                def testLog = fileExists('.ai-test.log') ? readFile('.ai-test.log') : ''
+                if (testLog.length() > 10000) {
+                    testLog = testLog.substring(testLog.length() - 10000)
+                }
                 def payload = JsonOutput.toJson([
                     pipeline: 'TEST',
                     project_id: params.PROJECT_ID,
                     mr_id: params.MR_IID,
                     source_branch: params.SOURCE_BRANCH,
-                    test_result: env.TEST_STAGE_RESULT,
-                    test_log: fileExists('.ai-test.log') ? readFile('.ai-test.log').takeRight(10000) : '',
+                    test_result: env.TEST_STAGE_RESULT ?: 'NOT_RUN',
+                    test_log: testLog,
                     c0: env.FINAL_C0 ? env.FINAL_C0.toFloat() : null,
                     c1: env.FINAL_C1 ? env.FINAL_C1.toFloat() : null
                 ])
