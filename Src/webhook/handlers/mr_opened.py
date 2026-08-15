@@ -1,5 +1,6 @@
 from ...gitlab.comments import format_ai_review_usage_comment, post_comment
-from ...jenkins.client import JenkinsError, trigger_build
+from ...jenkins.client import JenkinsError
+from ...jenkins.orchestrator import schedule_build
 
 
 async def handle(payload: dict) -> None:
@@ -21,7 +22,7 @@ async def handle(payload: dict) -> None:
         format_ai_review_usage_comment(),
     )
     try:
-        await trigger_build(
+        await schedule_build(
             project_id=project_id,
             mr_id=mr_id,
             source_branch=source_branch,

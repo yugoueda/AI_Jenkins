@@ -25,7 +25,8 @@ async def receive_webhook(
         elif action == "update":
             changes = payload.get("changes", {})
             resolved = changes.get("blocking_discussions_resolved", {}).get("current")
-            if resolved is True:
+            commit_added = bool(payload.get("object_attributes", {}).get("oldrev"))
+            if commit_added or resolved is True:
                 await mr_updated.handle(payload)
     elif x_gitlab_event == "Note Hook":
         await note.handle(payload)

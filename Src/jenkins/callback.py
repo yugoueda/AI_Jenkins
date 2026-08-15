@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 
 from ..gitlab.comments import format_build_failure_comment, post_comment
 from ..webhook.queue import enqueue
+from .client import JenkinsError
+from .orchestrator import start_next_pending_build
+from .runs import mark_ci_run_completed
 
 
 router = APIRouter(prefix="/internal/jenkins", tags=["jenkins"])
@@ -49,38 +52,21 @@ async def receive_result(
     _verify_callback_token(x_internal_token)
 
     if result.pipeline == "BUILD":
-        build_result = (result.build_result or "UNKNOWN").upper()
-        lint_result = (result.lint_result or "NOT_RUN").upper()
-        payload = {
-            "project_id": result.project_id,
-            "source_branch": result.source_branch,
-            "target_branch": result.target_branch,
-            "commit_sha": result.commit_sha,
-            "repository_url": result.repository_url,
-            "changed_files": [],
-            "build_result": build_result,
-            "build_log": (result.build_log or "")[-20_000:],
-            "lint_result": lint_result,
-            "lint_log": (result.lint_log or "")[-20_000:],
-        }
-        if build_result != "SUCCESS":
+        mark_ci_run_completed(
+            result.project_id,
+            result.mr_id,
+            result.commit_sha or "",
+        )
+        response = await _handle_build_result(result)
+        try:
+            await start_next_pending_build(result.project_id, result.mr_id)
+        except JenkinsError as exc:
             await post_comment(
                 result.project_id,
                 result.mr_id,
-                format_build_failure_comment(),
+                f"⚠️ 保留中コミットの再ビルドを開始できませんでした: {exc}",
             )
-            enqueue(result.mr_id, "BUILD_FIX", payload)
-            return {"status": "queued", "event_type": "BUILD_FIX"}
-        if lint_result != "SUCCESS":
-            await post_comment(
-                result.project_id,
-                result.mr_id,
-                "⚠️ 静的解析に失敗しました。ログを確認し、必要であれば "
-                "`/ai review` でレビューを開始してください。",
-            )
-            return {"status": "reported", "event_type": "LINT_FAILED"}
-        enqueue(result.mr_id, "REVIEW", payload)
-        return {"status": "queued", "event_type": "REVIEW"}
+        return response
 
     test_result = (result.test_result or "UNKNOWN").upper()
     coverage = (
@@ -100,3 +86,38 @@ async def receive_result(
         ),
     )
     return {"status": "reported", "event_type": "TEST"}
+
+
+async def _handle_build_result(result: JenkinsResult) -> dict[str, str]:
+    build_result = (result.build_result or "UNKNOWN").upper()
+    lint_result = (result.lint_result or "NOT_RUN").upper()
+    payload = {
+        "project_id": result.project_id,
+        "source_branch": result.source_branch,
+        "target_branch": result.target_branch,
+        "commit_sha": result.commit_sha,
+        "repository_url": result.repository_url,
+        "changed_files": [],
+        "build_result": build_result,
+        "build_log": (result.build_log or "")[-20_000:],
+        "lint_result": lint_result,
+        "lint_log": (result.lint_log or "")[-20_000:],
+    }
+    if build_result != "SUCCESS":
+        await post_comment(
+            result.project_id,
+            result.mr_id,
+            format_build_failure_comment(),
+        )
+        enqueue(result.mr_id, "BUILD_FIX", payload)
+        return {"status": "queued", "event_type": "BUILD_FIX"}
+    if lint_result != "SUCCESS":
+        await post_comment(
+            result.project_id,
+            result.mr_id,
+            "⚠️ 静的解析に失敗しました。ログを確認し、必要であれば "
+            "`/ai review` でレビューを開始してください。",
+        )
+        return {"status": "reported", "event_type": "LINT_FAILED"}
+    enqueue(result.mr_id, "REVIEW", payload)
+    return {"status": "queued", "event_type": "REVIEW"}

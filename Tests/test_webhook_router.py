@@ -34,7 +34,7 @@ def test_mr_open_event_triggers_jenkins(isolated_database, monkeypatch) -> None:
     async def comment(project_id, mr_id, message):
         comments.append((project_id, mr_id, message))
 
-    monkeypatch.setattr("Src.webhook.handlers.mr_opened.trigger_build", trigger)
+    monkeypatch.setattr("Src.webhook.handlers.mr_opened.schedule_build", trigger)
     monkeypatch.setattr("Src.webhook.handlers.mr_opened.post_comment", comment)
 
     response = TestClient(app).post(
@@ -68,7 +68,7 @@ def test_legacy_mr_opened_event_is_accepted(isolated_database, monkeypatch) -> N
     async def comment(*args):
         return None
 
-    monkeypatch.setattr("Src.webhook.handlers.mr_opened.trigger_build", trigger)
+    monkeypatch.setattr("Src.webhook.handlers.mr_opened.schedule_build", trigger)
     monkeypatch.setattr("Src.webhook.handlers.mr_opened.post_comment", comment)
 
     response = TestClient(app).post(
@@ -165,6 +165,70 @@ def test_update_without_resolved_transition_does_not_enqueue(
 
     assert response.status_code == 200
     assert isolated_database.query_scalar("SELECT COUNT(*) FROM job_queue") == 0
+
+
+def test_open_mr_commit_addition_rebuilds_once_when_no_findings(
+    isolated_database, monkeypatch
+) -> None:
+    monkeypatch.setenv("GITLAB_WEBHOOK_SECRET", "test-secret")
+    calls = []
+
+    async def trigger(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr("Src.jenkins.orchestrator.trigger_build", trigger)
+    payload = _mr_payload("update")
+    payload["project"]["git_http_url"] = "https://gitlab.example/repo.git"
+    payload["object_attributes"].update(
+        {
+            "state": "opened",
+            "oldrev": "old-sha",
+            "last_commit": {"id": "new-sha"},
+        }
+    )
+
+    first = TestClient(app).post("/webhook", headers=_headers(), json=payload)
+    duplicate = TestClient(app).post("/webhook", headers=_headers(), json=payload)
+
+    assert first.status_code == 200
+    assert duplicate.status_code == 200
+    assert len(calls) == 1
+    assert calls[0]["commit_sha"] == "new-sha"
+    assert isolated_database.query_scalar(
+        "SELECT status FROM ci_runs WHERE project_id='42' AND mr_id='7' "
+        "AND commit_sha='new-sha'"
+    ) == "RUNNING"
+
+
+def test_commit_addition_does_not_rebuild_closed_or_reviewed_mr(
+    isolated_database, monkeypatch
+) -> None:
+    monkeypatch.setenv("GITLAB_WEBHOOK_SECRET", "test-secret")
+    calls = []
+
+    async def trigger(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr("Src.jenkins.orchestrator.trigger_build", trigger)
+    payload = _mr_payload("update")
+    payload["object_attributes"].update(
+        {
+            "state": "closed",
+            "oldrev": "old-sha",
+            "last_commit": {"id": "closed-sha"},
+        }
+    )
+    TestClient(app).post("/webhook", headers=_headers(), json=payload)
+
+    payload["object_attributes"]["state"] = "opened"
+    payload["object_attributes"]["last_commit"] = {"id": "reviewed-sha"}
+    isolated_database.execute(
+        "INSERT INTO findings (id, mr_id, source, status) "
+        "VALUES ('R1', '7', 'AI', 'OPEN')"
+    )
+    TestClient(app).post("/webhook", headers=_headers(), json=payload)
+
+    assert calls == []
 
 
 def test_required_delivery_headers_are_enforced(

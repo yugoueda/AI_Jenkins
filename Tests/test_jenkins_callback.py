@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from Src.main import app
+from Src.jenkins.runs import mark_ci_run_running, reserve_ci_run
 
 
 def _headers(token: str = "callback-secret") -> dict[str, str]:
@@ -97,3 +98,41 @@ def test_callback_rejects_invalid_token(isolated_database, monkeypatch) -> None:
 
     assert response.status_code == 401
     assert isolated_database.query_scalar("SELECT COUNT(*) FROM job_queue") == 0
+
+
+def test_build_callback_starts_pending_commit(
+    isolated_database, monkeypatch
+) -> None:
+    monkeypatch.setenv("JENKINS_CALLBACK_TOKEN", "callback-secret")
+    calls = []
+
+    async def trigger(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr("Src.jenkins.orchestrator.trigger_build", trigger)
+    common = {
+        "project_id": "42",
+        "mr_id": "7",
+        "source_branch": "feature/example",
+        "target_branch": "main",
+        "repository_url": "https://gitlab.example/repo.git",
+    }
+    assert reserve_ci_run(commit_sha="sha-1", **common) == "TRIGGERING"
+    mark_ci_run_running("42", "7", "sha-1")
+    assert reserve_ci_run(commit_sha="sha-2", **common) == "PENDING"
+
+    response = TestClient(app).post(
+        "/internal/jenkins/result",
+        headers=_headers(),
+        json=_payload(commit_sha="sha-1"),
+    )
+
+    assert response.status_code == 202
+    assert calls[0]["commit_sha"] == "sha-2"
+    with isolated_database.engine.connect() as connection:
+        statuses = dict(
+            connection.exec_driver_sql(
+                "SELECT commit_sha, status FROM ci_runs"
+            ).all()
+        )
+    assert statuses == {"sha-1": "COMPLETED", "sha-2": "RUNNING"}

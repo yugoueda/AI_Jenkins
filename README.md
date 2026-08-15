@@ -95,9 +95,16 @@ JENKINS_CALLBACK_TOKEN=<random internal token>
 
 Flutter参照プロジェクトのBuild/Lint/Testは、標準Flutterイメージで実行します。
 ビルド対象はWebのみで、`flutter build web`を使用します。
+静的解析では`--no-fatal-infos`を使用し、infoレベルの指摘だけではAIレビューを
+停止しません。warningまたはerrorで失敗した場合は、従来どおり失敗を通知します。
 MR作成時には利用可能な`/ai`コマンドをMRコメントで案内します。ビルドに失敗した場合は
 即時に失敗を通知し、workerによる解析完了後に原因と修正案を追加コメントします。
 GitLab WebhookではMerge request eventsとNote eventsの両方を有効にしてください。
+
+Open状態かつDB上の指摘が0件のMRへコミットが追加されると、Webビルドを自動で
+再実行します。ビルド・静的解析が成功するとAIレビューへ進みます。同じコミットSHAの
+Webhook再送は重複実行せず、同一MRのビルド中に追加されたコミットはDBへ保留して、
+現行ビルド完了後に順次実行します。
 
 新規Jenkins環境では次のPipelineジョブがイメージ初期化時に自動作成されます。
 

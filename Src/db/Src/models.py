@@ -60,3 +60,32 @@ class JobQueue(Base):
         Index("idx_job_queue_mr_id_status", "mr_id", "status"),
         Index("idx_job_queue_created_at", "created_at"),
     )
+
+
+class CiRun(Base):
+    __tablename__ = "ci_runs"
+
+    project_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    mr_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    commit_sha: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_branch: Mapped[str] = mapped_column(Text, nullable=False)
+    target_branch: Mapped[str] = mapped_column(Text, nullable=False)
+    repository_url: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
+    started_at = mapped_column(DateTime)
+    completed_at = mapped_column(DateTime)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'TRIGGERING', 'RUNNING', 'COMPLETED', 'FAILED')",
+            name="ck_ci_runs_status",
+        ),
+        Index(
+            "idx_ci_runs_project_mr_status",
+            "project_id",
+            "mr_id",
+            "status",
+        ),
+        Index("idx_ci_runs_created_at", "created_at"),
+    )
