@@ -7,9 +7,12 @@ from Src.gitlab.comments import (
     format_ai_review_usage_comment,
     format_build_failure_comment,
     format_review_comment,
+    post_review_findings,
 )
+from Src.gitlab.client import GitLabError
 from Src.gitlab.commits import PatchError, commit_patch
 from Src.gitlab.discussions import all_discussions_resolved
+from Src.db.Src import database as db
 
 
 def test_ai_review_usage_comment_lists_supported_commands() -> None:
@@ -49,7 +52,88 @@ def test_review_comment_contains_finding_details() -> None:
     assert "## AI レビュー結果" in comment
     assert "### R1" in comment
     assert "`lib/order.dart` L10-12" in comment
+    assert comment.count("null checkがありません") == 1
     assert "/ai approve R1" in comment
+
+
+def test_review_findings_are_posted_as_inline_discussions(
+    isolated_database, monkeypatch
+) -> None:
+    db.execute(
+        "INSERT INTO findings "
+        "(id, mr_id, source, status, file_path, line_start, line_end, description, "
+        "created_at, updated_at) VALUES "
+        "('R1', '7', 'AI', 'OPEN', 'lib/order.dart', 10, 12, 'null check', "
+        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+    )
+    requests = []
+
+    async def fake_request(method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        if method == "GET":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "base_commit_sha": "base",
+                        "head_commit_sha": "head",
+                        "start_commit_sha": "start",
+                    }
+                ],
+            )
+        return httpx.Response(201, json={})
+
+    monkeypatch.setattr("Src.gitlab.comments.request", fake_request)
+
+    asyncio.run(post_review_findings("42", "7", ["R1"]))
+
+    assert requests[1][1].endswith("/merge_requests/7/discussions")
+    assert requests[1][2]["json"]["position"] == {
+        "position_type": "text",
+        "base_sha": "base",
+        "head_sha": "head",
+        "start_sha": "start",
+        "new_path": "lib/order.dart",
+        "new_line": 10,
+    }
+    assert "### R1" in requests[1][2]["json"]["body"]
+
+
+def test_review_finding_falls_back_to_note_when_line_is_not_in_diff(
+    isolated_database, monkeypatch
+) -> None:
+    db.execute(
+        "INSERT INTO findings "
+        "(id, mr_id, source, status, file_path, line_start, description, "
+        "created_at, updated_at) VALUES "
+        "('R1', '7', 'AI', 'OPEN', 'lib/order.dart', 10, 'null check', "
+        "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+    )
+    requests = []
+
+    async def fake_request(method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        if method == "GET":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "base_commit_sha": "base",
+                        "head_commit_sha": "head",
+                        "start_commit_sha": "start",
+                    }
+                ],
+            )
+        if path.endswith("/discussions"):
+            raise GitLabError("line is not part of the diff")
+        return httpx.Response(201, json={})
+
+    monkeypatch.setattr("Src.gitlab.comments.request", fake_request)
+
+    asyncio.run(post_review_findings("42", "7", ["R1"]))
+
+    assert requests[-1][1].endswith("/merge_requests/7/notes")
+    assert "### R1" in requests[-1][2]["json"]["body"]
 
 
 def test_discussions_require_every_resolvable_note_to_be_resolved(monkeypatch) -> None:
