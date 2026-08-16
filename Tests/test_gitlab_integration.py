@@ -110,6 +110,57 @@ def test_commit_patch_builds_gitlab_commit_and_restores_workspace(
     ]
 
 
+def test_commit_patch_repairs_incorrect_hunk_counts(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    source = tmp_path / "example.txt"
+    source.write_text("one\ntwo\nthree\n")
+    subprocess.run(["git", "add", "example.txt"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "initial",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    requests = []
+
+    async def fake_request(method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        return httpx.Response(201, json={})
+
+    monkeypatch.setattr("Src.gitlab.commits.request", fake_request)
+    patch = """--- a/example.txt
++++ b/example.txt
+@@ -1,99 +1,88 @@
+ one
+-two
++changed
+ three
+"""
+
+    asyncio.run(commit_patch("42", "feature", "R1", patch, str(tmp_path)))
+
+    assert source.read_text() == "one\ntwo\nthree\n"
+    assert requests[0][2]["json"]["actions"] == [
+        {
+            "action": "update",
+            "file_path": "example.txt",
+            "content": "one\nchanged\nthree\n",
+        }
+    ]
+
+
 def test_commit_patch_rejects_unsafe_paths(tmp_path: Path) -> None:
     patch = """--- a/../secret
 +++ b/../secret
@@ -123,3 +174,63 @@ def test_commit_patch_rejects_unsafe_paths(tmp_path: Path) -> None:
         assert "unsafe path" in str(exc)
     else:
         raise AssertionError("unsafe patch was accepted")
+
+
+def test_commit_patch_accepts_metadata_only_delete(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    ignore = tmp_path / ".gitignore"
+    generated = tmp_path / "generated.txt"
+    ignore.write_text("cache\n")
+    generated.write_text("large generated content\n")
+    subprocess.run(["git", "add", ".gitignore", "generated.txt"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "initial",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    requests = []
+
+    async def fake_request(method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        return httpx.Response(201, json={})
+
+    monkeypatch.setattr("Src.gitlab.commits.request", fake_request)
+    patch = """diff --git a/.gitignore b/.gitignore
+--- a/.gitignore
++++ b/.gitignore
+@@ -1 +1,2 @@
+ cache
++generated.txt
+diff --git a/generated.txt b/generated.txt
+deleted file mode 100644
+--- a/generated.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-(generated content omitted)
+"""
+
+    asyncio.run(commit_patch("42", "feature", "R1", patch, str(tmp_path)))
+
+    assert ignore.read_text() == "cache\n"
+    assert generated.read_text() == "large generated content\n"
+    assert requests[0][2]["json"]["actions"] == [
+        {
+            "action": "update",
+            "file_path": ".gitignore",
+            "content": "cache\ngenerated.txt\n",
+        },
+        {"action": "delete", "file_path": "generated.txt"},
+    ]
