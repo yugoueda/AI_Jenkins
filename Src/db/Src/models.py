@@ -98,3 +98,16 @@ class CiRun(Base):
         ),
         Index("idx_ci_runs_created_at", "created_at"),
     )
+
+
+class ReviewCheckpoint(Base):
+    __tablename__ = "review_checkpoints"
+
+    project_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    mr_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    commit_sha: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )

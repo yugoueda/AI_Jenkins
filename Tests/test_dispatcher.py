@@ -149,6 +149,79 @@ def test_clean_re_review_enqueues_unit_test_generation(
     ) == "UNIT_TEST_GEN"
 
 
+def test_review_uses_and_advances_successful_checkpoint(
+    isolated_database, monkeypatch, tmp_path
+) -> None:
+    _use_workspace(monkeypatch, tmp_path)
+    dispatcher.save_review_checkpoint("42", "7", "old-sha")
+    prompt_calls = []
+
+    async def run_agent(*args):
+        return 0, '{"findings": []}'
+
+    async def post_review(*args):
+        return None
+
+    def build_prompt(*args, **kwargs):
+        prompt_calls.append(kwargs)
+        return "prompt"
+
+    monkeypatch.setattr(dispatcher, "run_agent", run_agent)
+    monkeypatch.setattr(
+        dispatcher.review_prompt,
+        "build_review_prompt_with_ci",
+        build_prompt,
+    )
+    monkeypatch.setattr(
+        dispatcher.gitlab_comments,
+        "post_review_findings",
+        post_review,
+    )
+
+    asyncio.run(
+        dispatcher.dispatch(
+            _job("REVIEW", {"commit_sha": "new-sha"})
+        )
+    )
+
+    assert prompt_calls[0]["base_commit"] == "old-sha"
+    assert dispatcher.get_review_checkpoint("42", "7") == "new-sha"
+
+
+def test_failed_review_does_not_advance_checkpoint(
+    isolated_database, monkeypatch, tmp_path
+) -> None:
+    _use_workspace(monkeypatch, tmp_path)
+    dispatcher.save_review_checkpoint("42", "7", "old-sha")
+
+    async def run_agent(*args):
+        return 0, "not json"
+
+    async def comment(*args):
+        return None
+
+    monkeypatch.setattr(dispatcher, "run_agent", run_agent)
+    monkeypatch.setattr(
+        dispatcher.review_prompt,
+        "build_review_prompt_with_ci",
+        lambda *args, **kwargs: "prompt",
+    )
+    monkeypatch.setattr(dispatcher.gitlab_comments, "post_comment", comment)
+
+    try:
+        asyncio.run(
+            dispatcher.dispatch(
+                _job("REVIEW", {"commit_sha": "failed-sha"})
+            )
+        )
+    except dispatcher.AgentExecutionError:
+        pass
+    else:
+        raise AssertionError("invalid review did not fail")
+
+    assert dispatcher.get_review_checkpoint("42", "7") == "old-sha"
+
+
 def test_unit_test_generation_commits_and_starts_jenkins(
     isolated_database, monkeypatch, tmp_path
 ) -> None:

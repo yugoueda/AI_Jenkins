@@ -12,6 +12,35 @@ def test_review_parser_accepts_fenced_json(isolated_database) -> None:
     assert finding_ids == []
 
 
+def test_review_parser_accepts_json_surrounded_by_prose(isolated_database) -> None:
+    finding_ids = parse_and_save_review(
+        "7",
+        'Review complete.\n{"findings":[]}\nThat is all.',
+    )
+
+    assert finding_ids == []
+
+
+def test_review_parser_accepts_fenced_json_after_prose(isolated_database) -> None:
+    finding_ids = parse_and_save_review(
+        "7",
+        'Review result:\n```JSON\n{"findings":[]}\n```\nDone.',
+    )
+
+    assert finding_ids == []
+
+
+def test_review_parser_skips_unrelated_object_before_review_json(
+    isolated_database,
+) -> None:
+    finding_ids = parse_and_save_review(
+        "7",
+        'metadata: {"status":"complete"}\nresult: {"findings":[]}',
+    )
+
+    assert finding_ids == []
+
+
 def test_review_parser_rejects_non_json(isolated_database) -> None:
     with pytest.raises(ValueError, match="invalid review JSON"):
         parse_and_save_review("7", "review complete")

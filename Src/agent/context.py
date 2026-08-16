@@ -7,14 +7,20 @@ def build_diff_context(
     event_type: str,
     working_directory: str | None = None,
     target_branch: str = "main",
+    base_commit: str | None = None,
 ) -> str:
     cwd = Path(working_directory).resolve() if working_directory else Path.cwd()
+    revisions = (
+        [base_commit, "HEAD"]
+        if base_commit
+        else [f"origin/{target_branch}...HEAD"]
+    )
     result = subprocess.run(
         [
             "git",
             "diff",
-            "-W",
-            f"origin/{target_branch}...HEAD",
+            "--unified=3",
+            *revisions,
             "--",
             *changed_files,
         ],

@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 
+from .checkpoints import get_review_checkpoint, save_review_checkpoint
 from .prompts import build_fix as build_fix_prompt
 from .parser import parse_and_save_review, parse_and_save_unit_tests
 from .prompts import review as review_prompt
@@ -49,6 +50,8 @@ async def dispatch(job: dict) -> None:
 
     if event_type in ("REVIEW", "RE_REVIEW"):
         changed_files = payload.get("changed_files", [])
+        commit_sha = str(payload.get("commit_sha") or "")
+        base_commit = get_review_checkpoint(project_id, mr_id)
         prompt = review_prompt.build_review_prompt_with_ci(
             mr_id,
             changed_files,
@@ -56,6 +59,7 @@ async def dispatch(job: dict) -> None:
             lint_result=_ci_result(payload, "lint"),
             working_directory=working_directory,
             target_branch=target_branch,
+            base_commit=base_commit,
         )
         returncode, output = await run_agent(prompt, event_type, working_directory)
         if returncode == 0:
@@ -69,6 +73,8 @@ async def dispatch(job: dict) -> None:
                 mr_id,
                 finding_ids,
             )
+            if commit_sha:
+                save_review_checkpoint(project_id, mr_id, commit_sha)
             if event_type == "RE_REVIEW" and not finding_ids:
                 enqueue(
                     mr_id,

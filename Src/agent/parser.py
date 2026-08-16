@@ -1,23 +1,41 @@
+import hashlib
 import json
 import re
-import hashlib
 
 from ..db.Src import database as db
 
 
 def _extract_json(raw_output: str) -> dict:
     output = raw_output.strip()
-    if output.startswith("```"):
-        _, _, output = output.partition("\n")
-        if output.rstrip().endswith("```"):
-            output = output.rstrip()[:-3].rstrip()
-    try:
-        data = json.loads(output)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"agent returned invalid review JSON: {exc}") from exc
-    if not isinstance(data, dict) or not isinstance(data.get("findings", []), list):
-        raise ValueError("agent review JSON must contain a findings array")
-    return data
+    decoder = json.JSONDecoder()
+
+    # Prefer fenced blocks because agents sometimes add a short explanation
+    # before an otherwise valid ```json response despite the prompt.
+    candidates = [
+        match.group("content").strip()
+        for match in re.finditer(
+            r"```(?:json)?\s*\r?\n(?P<content>.*?)```",
+            output,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+    ]
+    candidates.append(output)
+
+    last_error: json.JSONDecodeError | None = None
+    for candidate in candidates:
+        # raw_decode lets us recover a JSON object surrounded by prose while
+        # still parsing strings and nested braces according to JSON syntax.
+        for match in re.finditer(r"\{", candidate):
+            try:
+                data, _ = decoder.raw_decode(candidate, match.start())
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                continue
+            if isinstance(data, dict) and isinstance(data.get("findings"), list):
+                return data
+
+    detail = f": {last_error}" if last_error else ""
+    raise ValueError(f"agent returned invalid review JSON{detail}")
 
 
 def parse_and_save_review(mr_id: str, raw_output: str) -> list[str]:

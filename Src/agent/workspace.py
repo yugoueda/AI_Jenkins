@@ -57,6 +57,7 @@ def prepare_workspace(payload: dict, mr_id: str) -> str:
     project_id = str(payload.get("project_id") or "")
     source_branch = str(payload.get("source_branch") or "")
     target_branch = str(payload.get("target_branch") or "main")
+    commit_sha = str(payload.get("commit_sha") or "")
     if not repository_url:
         return str(workspace_root)
     if not project_id or not source_branch:
@@ -91,5 +92,9 @@ def prepare_workspace(payload: dict, mr_id: str) -> str:
             f"+refs/heads/{target_branch}:refs/remotes/origin/{target_branch}",
         ],
     )
-    _run(workspace, ["checkout", "-B", source_branch, f"origin/{source_branch}"])
+    # A newer branch tip may exist by the time a queued review starts. Check
+    # out the exact commit that Jenkins built so the recorded checkpoint and
+    # the reviewed HEAD always refer to the same source state.
+    checkout_ref = commit_sha or f"origin/{source_branch}"
+    _run(workspace, ["checkout", "-B", source_branch, checkout_ref])
     return str(workspace)

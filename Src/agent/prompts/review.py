@@ -3,7 +3,7 @@ from ..context import build_diff_context
 
 REVIEW_SYSTEM = """\
 あなたはFlutter/Dartコードの専門レビュアーです。
-渡されたdiff+周辺実装を解析し、コード品質・バグリスク・セキュリティの問題を検出してください。
+渡されたdiffを解析し、コード品質・バグリスク・セキュリティの問題を検出してください。
 
 ## レビュー観点
 1. コード品質: 命名規則・関数分割・単一責任の原則・重複コード
@@ -40,14 +40,16 @@ def build_review_prompt(
     changed_files: list[str],
     working_directory: str | None = None,
     target_branch: str = "main",
+    base_commit: str | None = None,
 ) -> str:
     diff_context = build_diff_context(
         changed_files,
         event_type="REVIEW",
         working_directory=working_directory,
         target_branch=target_branch,
+        base_commit=base_commit,
     )
-    return f"{REVIEW_SYSTEM}\n\nMR ID: {mr_id}\n\n## レビュー対象diff+周辺実装\n\n{diff_context}"
+    return f"{REVIEW_SYSTEM}\n\nMR ID: {mr_id}\n\n## レビュー対象diff\n\n{diff_context}"
 
 
 def build_review_prompt_with_ci(
@@ -57,12 +59,14 @@ def build_review_prompt_with_ci(
     lint_result: str | None = None,
     working_directory: str | None = None,
     target_branch: str = "main",
+    base_commit: str | None = None,
 ) -> str:
     prompt = build_review_prompt(
         mr_id,
         changed_files,
         working_directory,
         target_branch,
+        base_commit,
     )
     return (
         f"{prompt}\n\n"
