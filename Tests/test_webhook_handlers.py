@@ -57,14 +57,26 @@ def test_approve_enqueues_job(isolated_database) -> None:
     assert '"finding_id": "R1"' in row["payload"]
 
 
-def test_reject_updates_finding(isolated_database) -> None:
+def test_reject_updates_finding_and_starts_re_review_build(
+    isolated_database, monkeypatch
+) -> None:
     _insert_finding(isolated_database)
+    calls = []
 
-    asyncio.run(note.handle(_note_payload("/ai reject R1")))
+    async def schedule(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(note, "schedule_build", schedule)
+    payload = _note_payload("/ai reject R1")
+    payload["merge_request"]["last_commit"] = {"id": "latest-sha"}
+
+    asyncio.run(note.handle(payload))
 
     assert isolated_database.query_scalar(
         "SELECT status FROM findings WHERE id='R1'"
     ) == "REJECTED"
+    assert calls[0]["commit_sha"] == "latest-sha"
+    assert calls[0]["review_event_type"] == "RE_REVIEW"
 
 
 def test_test_command_enqueues_unit_test_job(isolated_database) -> None:

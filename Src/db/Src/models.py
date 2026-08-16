@@ -68,6 +68,11 @@ class CiRun(Base):
     project_id: Mapped[str] = mapped_column(Text, primary_key=True)
     mr_id: Mapped[str] = mapped_column(Text, primary_key=True)
     commit_sha: Mapped[str] = mapped_column(Text, primary_key=True)
+    review_event_type: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        default="REVIEW",
+    )
     source_branch: Mapped[str] = mapped_column(Text, nullable=False)
     target_branch: Mapped[str] = mapped_column(Text, nullable=False)
     repository_url: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
@@ -77,6 +82,10 @@ class CiRun(Base):
     completed_at = mapped_column(DateTime)
 
     __table_args__ = (
+        CheckConstraint(
+            "review_event_type IN ('REVIEW', 'RE_REVIEW')",
+            name="ck_ci_runs_review_event_type",
+        ),
         CheckConstraint(
             "status IN ('PENDING', 'TRIGGERING', 'RUNNING', 'COMPLETED', 'FAILED')",
             name="ck_ci_runs_status",

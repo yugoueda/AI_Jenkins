@@ -136,3 +136,32 @@ def test_build_callback_starts_pending_commit(
             ).all()
         )
     assert statuses == {"sha-1": "COMPLETED", "sha-2": "RUNNING"}
+
+
+def test_successful_re_review_build_enqueues_re_review(
+    isolated_database, monkeypatch
+) -> None:
+    monkeypatch.setenv("JENKINS_CALLBACK_TOKEN", "callback-secret")
+    common = {
+        "project_id": "42",
+        "mr_id": "7",
+        "commit_sha": "abc123",
+        "source_branch": "feature/example",
+        "target_branch": "main",
+        "repository_url": "https://gitlab.example/repo.git",
+        "review_event_type": "RE_REVIEW",
+    }
+    assert reserve_ci_run(**common) == "TRIGGERING"
+    mark_ci_run_running("42", "7", "abc123", "RE_REVIEW")
+
+    response = TestClient(app).post(
+        "/internal/jenkins/result",
+        headers=_headers(),
+        json=_payload(),
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {"status": "queued", "event_type": "RE_REVIEW"}
+    assert isolated_database.query_scalar(
+        "SELECT event_type FROM job_queue"
+    ) == "RE_REVIEW"

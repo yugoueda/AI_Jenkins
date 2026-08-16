@@ -15,19 +15,24 @@ async def handle(payload: dict) -> None:
         return
     if not await gitlab.all_discussions_resolved(project_id, mr_id):
         return
-    enqueue(
-        mr_id,
-        "RE_REVIEW",
-        {
-            "project_id": project_id,
-            "source_branch": attrs.get("source_branch"),
-            "target_branch": attrs.get("target_branch"),
-            "repository_url": payload.get("project", {}).get("git_http_url", ""),
-            "changed_files": [],
-            "build_result": payload.get("build_result"),
-            "lint_result": payload.get("lint_result"),
-        },
-    )
+    last_commit = attrs.get("last_commit") or payload.get("last_commit") or {}
+    commit_sha = str(last_commit.get("id") or attrs.get("sha") or "")
+    try:
+        await schedule_build(
+            project_id=project_id,
+            mr_id=mr_id,
+            source_branch=str(attrs.get("source_branch") or ""),
+            target_branch=str(attrs.get("target_branch") or ""),
+            commit_sha=commit_sha,
+            repository_url=str(payload.get("project", {}).get("git_http_url") or ""),
+            review_event_type="RE_REVIEW",
+        )
+    except JenkinsError as exc:
+        await post_comment(
+            project_id,
+            mr_id,
+            f"⚠️ 再レビュー用ビルドを開始できませんでした: {exc}",
+        )
 
 
 async def _handle_commit_added(payload: dict, project_id: str, mr_id: str) -> None:

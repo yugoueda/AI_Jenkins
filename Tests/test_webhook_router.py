@@ -90,7 +90,7 @@ def test_invalid_token_does_not_enqueue(isolated_database, monkeypatch) -> None:
     assert isolated_database.query_scalar("SELECT COUNT(*) FROM job_queue") == 0
 
 
-def test_resolved_discussions_enqueue_re_review(
+def test_resolved_discussions_start_re_review_build(
     isolated_database, monkeypatch
 ) -> None:
     monkeypatch.setenv("GITLAB_WEBHOOK_SECRET", "test-secret")
@@ -103,7 +103,18 @@ def test_resolved_discussions_enqueue_re_review(
         "Src.webhook.handlers.mr_updated.gitlab.all_discussions_resolved",
         all_resolved,
     )
+    calls = []
+
+    async def schedule(**kwargs):
+        calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "Src.webhook.handlers.mr_updated.schedule_build",
+        schedule,
+    )
     payload = _mr_payload("update")
+    payload["object_attributes"]["last_commit"] = {"id": "latest-sha"}
+    payload["project"]["git_http_url"] = "https://gitlab.example/repo.git"
     payload["changes"] = {
         "blocking_discussions_resolved": {"previous": False, "current": True}
     }
@@ -111,9 +122,17 @@ def test_resolved_discussions_enqueue_re_review(
     response = TestClient(app).post("/webhook", headers=_headers(), json=payload)
 
     assert response.status_code == 200
-    assert isolated_database.query_scalar(
-        "SELECT COUNT(*) FROM job_queue WHERE event_type='RE_REVIEW'"
-    ) == 1
+    assert calls == [
+        {
+            "project_id": "42",
+            "mr_id": "7",
+            "source_branch": "feature/example",
+            "target_branch": "main",
+            "commit_sha": "latest-sha",
+            "repository_url": "https://gitlab.example/repo.git",
+            "review_event_type": "RE_REVIEW",
+        }
+    ]
 
 
 def test_unhandled_event_returns_ok_without_enqueue(

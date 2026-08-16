@@ -15,6 +15,7 @@ async def schedule_build(
     target_branch: str,
     commit_sha: str,
     repository_url: str = "",
+    review_event_type: str = "REVIEW",
 ) -> str:
     if not commit_sha:
         await trigger_build(
@@ -34,6 +35,7 @@ async def schedule_build(
         source_branch=source_branch,
         target_branch=target_branch,
         repository_url=repository_url,
+        review_event_type=review_event_type,
     )
     if status == "DUPLICATE":
         return status
@@ -48,6 +50,7 @@ async def schedule_build(
             "target_branch": target_branch,
             "commit_sha": commit_sha,
             "repository_url": repository_url,
+            "review_event_type": review_event_type,
         }
     )
     return "STARTED"
@@ -76,10 +79,12 @@ async def _start_reserved_build(run: dict) -> None:
             run["project_id"],
             run["mr_id"],
             run["commit_sha"],
+            run["review_event_type"],
         )
         raise
     mark_ci_run_running(
         run["project_id"],
         run["mr_id"],
         run["commit_sha"],
+        run["review_event_type"],
     )

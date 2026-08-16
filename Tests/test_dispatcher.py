@@ -64,14 +64,21 @@ def test_approve_commits_patch_and_updates_status(
     _insert_finding(isolated_database, patch)
     _use_workspace(monkeypatch, tmp_path)
     calls = []
+    builds = []
 
     async def commit(*args):
         calls.append(args)
+        return "new-sha"
+
+    async def schedule(**kwargs):
+        builds.append(kwargs)
+        return "STARTED"
 
     async def comment(*args):
         return None
 
     monkeypatch.setattr(dispatcher, "commit_patch", commit)
+    monkeypatch.setattr(dispatcher, "schedule_build", schedule)
     monkeypatch.setattr(dispatcher.gitlab_comments, "post_comment", comment)
 
     asyncio.run(dispatcher.dispatch(_job("APPROVE", {"finding_id": "R1"})))
@@ -80,6 +87,36 @@ def test_approve_commits_patch_and_updates_status(
     assert isolated_database.query_scalar(
         "SELECT status FROM findings WHERE id='R1'"
     ) == "APPLIED"
+    assert builds[0]["commit_sha"] == "new-sha"
+    assert builds[0]["review_event_type"] == "RE_REVIEW"
+
+
+def test_approve_posts_patch_failure(
+    isolated_database, monkeypatch, tmp_path
+) -> None:
+    _insert_finding(isolated_database, "invalid patch")
+    _use_workspace(monkeypatch, tmp_path)
+    messages = []
+
+    async def fail_commit(*args):
+        raise dispatcher.PatchError("git apply --check failed")
+
+    async def capture(project_id, mr_id, message):
+        messages.append(message)
+
+    monkeypatch.setattr(dispatcher, "commit_patch", fail_commit)
+    monkeypatch.setattr(dispatcher.gitlab_comments, "post_comment", capture)
+
+    try:
+        asyncio.run(dispatcher.dispatch(_job("APPROVE", {"finding_id": "R1"})))
+    except dispatcher.AgentExecutionError:
+        pass
+    else:
+        raise AssertionError("patch failure did not fail the job")
+
+    assert messages == [
+        "⚠️ APPROVE ジョブに失敗しました: git apply --check failed"
+    ]
 
 
 def test_clean_re_review_enqueues_unit_test_generation(

@@ -52,12 +52,12 @@ async def receive_result(
     _verify_callback_token(x_internal_token)
 
     if result.pipeline == "BUILD":
-        mark_ci_run_completed(
+        review_event_type = mark_ci_run_completed(
             result.project_id,
             result.mr_id,
             result.commit_sha or "",
         )
-        response = await _handle_build_result(result)
+        response = await _handle_build_result(result, review_event_type)
         try:
             await start_next_pending_build(result.project_id, result.mr_id)
         except JenkinsError as exc:
@@ -88,7 +88,10 @@ async def receive_result(
     return {"status": "reported", "event_type": "TEST"}
 
 
-async def _handle_build_result(result: JenkinsResult) -> dict[str, str]:
+async def _handle_build_result(
+    result: JenkinsResult,
+    review_event_type: str = "REVIEW",
+) -> dict[str, str]:
     build_result = (result.build_result or "UNKNOWN").upper()
     lint_result = (result.lint_result or "NOT_RUN").upper()
     payload = {
@@ -119,5 +122,5 @@ async def _handle_build_result(result: JenkinsResult) -> dict[str, str]:
             "`/ai review` でレビューを開始してください。",
         )
         return {"status": "reported", "event_type": "LINT_FAILED"}
-    enqueue(result.mr_id, "REVIEW", payload)
-    return {"status": "queued", "event_type": "REVIEW"}
+    enqueue(result.mr_id, review_event_type, payload)
+    return {"status": "queued", "event_type": review_event_type}

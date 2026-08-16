@@ -5,6 +5,8 @@ from ... import gitlab
 from ..parser import AiCommand, ReviewCommand, parse
 from ..queue import enqueue
 from ...db.Src import database as db
+from ...jenkins.client import JenkinsError
+from ...jenkins.orchestrator import schedule_build
 
 
 class CommandError(Exception):
@@ -22,6 +24,8 @@ async def handle(payload: dict) -> None:
     source_branch = mr.get("source_branch") or ""
     target_branch = mr.get("target_branch") or ""
     repository_url = payload.get("project", {}).get("git_http_url") or ""
+    last_commit = mr.get("last_commit") or {}
+    commit_sha = str(last_commit.get("id") or mr.get("sha") or "")
     body = attrs.get("note", "")
     command = parse(body)
     if command is None:
@@ -59,6 +63,7 @@ async def handle(payload: dict) -> None:
                 source_branch,
                 target_branch,
                 repository_url,
+                commit_sha,
                 command,
             )
     except CommandError as exc:
@@ -75,6 +80,7 @@ async def _handle_ai(
     source_branch: str,
     target_branch: str,
     repository_url: str,
+    commit_sha: str,
     cmd: AiCommand,
 ) -> None:
     if cmd.cmd in ("apply", "approve", "reject") and not cmd.finding_id:
@@ -121,6 +127,34 @@ async def _handle_ai(
             "WHERE id=:finding_id",
             {"finding_id": cmd.finding_id},
         )
+        if not db.query_scalar(
+            "SELECT COUNT(*) FROM findings "
+            "WHERE mr_id=:mr_id AND status='OPEN'",
+            {"mr_id": mr_id},
+        ):
+            if not commit_sha:
+                await _post_error(
+                    project_id,
+                    mr_id,
+                    "最新コミットSHAを取得できず、再ビルドを開始できません",
+                )
+                return
+            try:
+                await schedule_build(
+                    project_id=project_id,
+                    mr_id=mr_id,
+                    source_branch=source_branch,
+                    target_branch=target_branch,
+                    commit_sha=commit_sha,
+                    repository_url=repository_url,
+                    review_event_type="RE_REVIEW",
+                )
+            except JenkinsError as exc:
+                await _post_error(
+                    project_id,
+                    mr_id,
+                    f"再レビュー用ビルドを開始できません: {exc}",
+                )
         return
 
     if cmd.cmd == "test":

@@ -64,3 +64,19 @@ def test_schedule_build_records_running_commit(
     assert isolated_database.query_scalar(
         "SELECT status FROM ci_runs WHERE commit_sha='sha-1'"
     ) == "RUNNING"
+
+
+def test_same_commit_can_run_review_then_re_review(isolated_database) -> None:
+    assert _reserve("sha-1") == "TRIGGERING"
+    mark_ci_run_running("42", "7", "sha-1")
+    mark_ci_run_completed("42", "7", "sha-1")
+
+    assert reserve_ci_run(
+        project_id="42",
+        mr_id="7",
+        commit_sha="sha-1",
+        source_branch="feature/example",
+        target_branch="main",
+        repository_url="https://gitlab.example/repo.git",
+        review_event_type="RE_REVIEW",
+    ) == "TRIGGERING"

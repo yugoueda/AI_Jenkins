@@ -10,8 +10,9 @@ from .runner import run_agent
 from .workspace import prepare_workspace
 from ..db.Src import database as db
 from ..gitlab import comments as gitlab_comments
-from ..gitlab.commits import commit_generated_files, commit_patch
-from ..jenkins.client import trigger_test
+from ..gitlab.commits import PatchError, commit_generated_files, commit_patch
+from ..jenkins.client import JenkinsError, trigger_test
+from ..jenkins.orchestrator import schedule_build
 from ..webhook.queue import enqueue
 
 
@@ -58,7 +59,10 @@ async def dispatch(job: dict) -> None:
         )
         returncode, output = await run_agent(prompt, event_type, working_directory)
         if returncode == 0:
-            finding_ids = parse_and_save_review(mr_id, output)
+            try:
+                finding_ids = parse_and_save_review(mr_id, output)
+            except (TypeError, ValueError) as exc:
+                await _handle_failure(project_id, mr_id, event_type, str(exc))
             await _require_project(project_id)
             await gitlab_comments.post_review_findings(
                 project_id,
@@ -117,13 +121,21 @@ async def dispatch(job: dict) -> None:
                     event_type,
                     "source branch is missing",
                 )
-            await commit_patch(
-                project_id,
-                source_branch,
-                finding_id,
-                patch,
-                working_directory,
-            )
+            try:
+                commit_sha = await commit_patch(
+                    project_id,
+                    source_branch,
+                    finding_id,
+                    patch,
+                    working_directory,
+                )
+            except PatchError as exc:
+                await _handle_failure(
+                    project_id,
+                    mr_id,
+                    event_type,
+                    str(exc),
+                )
             db.execute(
                 "UPDATE findings SET status='APPLIED', updated_at=CURRENT_TIMESTAMP "
                 "WHERE id=:finding_id AND mr_id=:mr_id",
@@ -134,6 +146,40 @@ async def dispatch(job: dict) -> None:
                 mr_id,
                 f"✅ {finding_id} の修正パッチを `{source_branch}` にコミットしました。",
             )
+            if not db.query_scalar(
+                "SELECT COUNT(*) FROM findings "
+                "WHERE mr_id=:mr_id AND status='OPEN'",
+                {"mr_id": mr_id},
+            ):
+                if not commit_sha:
+                    await gitlab_comments.post_comment(
+                        project_id,
+                        mr_id,
+                        "⚠️ 修正コミットSHAを取得できず、再ビルドを開始できませんでした。",
+                    )
+                else:
+                    try:
+                        build_status = await schedule_build(
+                            project_id=project_id,
+                            mr_id=mr_id,
+                            source_branch=source_branch,
+                            target_branch=target_branch,
+                            commit_sha=commit_sha,
+                            repository_url=str(payload.get("repository_url") or ""),
+                            review_event_type="RE_REVIEW",
+                        )
+                    except JenkinsError as exc:
+                        await gitlab_comments.post_comment(
+                            project_id,
+                            mr_id,
+                            f"⚠️ 再レビュー用ビルドを開始できませんでした: {exc}",
+                        )
+                    else:
+                        await gitlab_comments.post_comment(
+                            project_id,
+                            mr_id,
+                            f"🔄 全指摘の対応が完了したため、再レビュー用ビルドを開始しました（{build_status}）。",
+                        )
         return
 
     if event_type == "UNIT_TEST_GEN":
