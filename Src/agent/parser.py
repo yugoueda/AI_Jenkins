@@ -5,8 +5,23 @@ import hashlib
 from ..db.Src import database as db
 
 
+def _extract_json(raw_output: str) -> dict:
+    output = raw_output.strip()
+    if output.startswith("```"):
+        _, _, output = output.partition("\n")
+        if output.rstrip().endswith("```"):
+            output = output.rstrip()[:-3].rstrip()
+    try:
+        data = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"agent returned invalid review JSON: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("findings", []), list):
+        raise ValueError("agent review JSON must contain a findings array")
+    return data
+
+
 def parse_and_save_review(mr_id: str, raw_output: str) -> list[str]:
-    data = json.loads(raw_output)
+    data = _extract_json(raw_output)
     saved_ids: list[str] = []
     max_n = db.query_scalar(
         "SELECT COALESCE(MAX(CAST(SUBSTR(id, 2) AS INTEGER)), 0) "
@@ -48,17 +63,32 @@ def parse_fix_diff(raw_output: str) -> str:
 
 def parse_and_save_unit_tests(mr_id: str, raw_output: str) -> list[tuple[str, str]]:
     results: list[tuple[str, str]] = []
-    blocks = re.split(r"(?=^// test/)", raw_output, flags=re.MULTILINE)
-    for block in blocks:
-        block = block.strip()
-        if not block:
+    # Agents occasionally wrap each generated file in its own Markdown code
+    # block even when the prompt explicitly forbids it.  Strip fence-only
+    # lines before finding file markers so that the opening fence for the next
+    # file cannot leak into the previous Dart source.
+    normalized_output = re.sub(
+        r"^[ \t]*```(?:dart)?[ \t]*\r?\n?",
+        "",
+        raw_output,
+        flags=re.MULTILINE | re.IGNORECASE,
+    )
+    markers = list(
+        re.finditer(
+            r"^// (test/[^\r\n]+)\r?$",
+            normalized_output,
+            flags=re.MULTILINE,
+        )
+    )
+    for index, marker in enumerate(markers):
+        file_path = marker.group(1).strip()
+        end = (
+            markers[index + 1].start()
+            if index + 1 < len(markers)
+            else len(normalized_output)
+        )
+        content = normalized_output[marker.end() : end].strip()
+        if not content:
             continue
-        first_line, _, rest = block.partition("\n")
-        file_path = first_line.removeprefix("// ").strip()
-        content = rest.strip()
-        if content.startswith("```"):
-            _, _, content = content.partition("\n")
-            if content.endswith("```"):
-                content = content[:-3].rstrip()
         results.append((file_path, content))
     return results

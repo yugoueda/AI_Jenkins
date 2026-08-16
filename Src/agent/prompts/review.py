@@ -15,6 +15,8 @@ REVIEW_SYSTEM = """\
 - JSONのみ出力すること。説明文・前置き・後書きは一切含めない。
 - 指摘がない場合は {"findings": []} のみ返すこと。
 - コードブロック（```）で囲まない。生のJSONを返すこと。
+- 作業ツリーと一時ファイルは作成・変更しない。必要な調査は読み取りのみで行う。
+- `fix_patch_sha256`はサーバー側で計算するため、ハッシュ計算は行わない。
 
 ## 出力形式
 {
@@ -26,8 +28,7 @@ REVIEW_SYSTEM = """\
       "line_end": <終了行>,
       "description": "<指摘内容>",
       "suggestion": { "before": "<修正前>", "after": "<修正後>" },
-      "fix_patch": "<unified diff>",
-      "fix_patch_sha256": "<patch sha256>"
+      "fix_patch": "<unified diff>"
     }
   ]
 }

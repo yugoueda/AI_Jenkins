@@ -9,6 +9,9 @@ mode = os.getenv("FAKE_CLAUDE_MODE", "success")
 
 if mode == "timeout":
     time.sleep(10)
+elif mode == "progress":
+    time.sleep(0.2)
+    print('{"findings":[]}')
 elif mode == "failure":
     print("fake CLI failure", file=sys.stderr)
     raise SystemExit(7)

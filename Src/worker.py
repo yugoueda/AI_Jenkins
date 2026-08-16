@@ -29,6 +29,12 @@ async def process_once() -> bool:
     if job is None:
         return False
 
+    logging.info(
+        "Job started: job_id=%s event_type=%s mr=%s",
+        job["job_id"],
+        job["event_type"],
+        job["mr_id"],
+    )
     try:
         await dispatch(job)
     except Exception:
@@ -36,6 +42,12 @@ async def process_once() -> bool:
         complete_job(job["job_id"], succeeded=False)
     else:
         complete_job(job["job_id"], succeeded=True)
+        logging.info(
+            "Job completed: job_id=%s event_type=%s mr=%s",
+            job["job_id"],
+            job["event_type"],
+            job["mr_id"],
+        )
     return True
 
 
