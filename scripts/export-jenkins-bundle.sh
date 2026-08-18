@@ -81,6 +81,7 @@ docker image save "$jenkins_image" "$agent_image" docker:28-dind |
   echo "agent_architecture=$(docker image inspect --format '{{.Architecture}}' "$agent_image")"
   echo "docker_image=docker:28-dind"
   echo "docker_image_id=$(docker image inspect --format '{{.Id}}' docker:28-dind)"
+  echo "docker_image_architecture=$(docker image inspect --format '{{.Architecture}}' docker:28-dind)"
   echo "includes_jenkins_home=$include_data"
 } >"$bundle_dir/bundle-manifest.txt"
 

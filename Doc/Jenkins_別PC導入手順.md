@@ -25,17 +25,18 @@ GitLab Container Registry、GHCR、Docker Hubなどを利用できる場合の�
 
 ### 配布元PC
 
-`.env` の `JENKINS_IMAGE` を実際のRegistry名へ設定します。
+`.env` の `JENKINS_IMAGE` と `AGENT_IMAGE` を実際のRegistry名へ設定します。
 
 ```dotenv
 JENKINS_IMAGE=registry.example.com/your-team/ai-jenkins:2.568.1-1
+AGENT_IMAGE=registry.example.com/your-team/ai-agent:2.1.220-1
 ```
 
-Registryへログインしてpushします。
+Registryへログインし、両方のイメージをビルドしてpushします。
 
 ```bash
 docker login registry.example.com
-./scripts/jenkins-image.sh push
+./scripts/publish-images.sh
 ```
 
 導入先PCへ次のファイルをコピーします。
@@ -43,14 +44,22 @@ docker login registry.example.com
 - `compose.yaml`
 - `.env`
 - 空の `jenkins/certs/` ディレクトリ
+- CLIエージェントを使う場合は `scripts/claude-login.sh`
 
 ### 導入先PC
 
 ```bash
 docker login registry.example.com
-docker compose pull
+docker compose --profile agent pull
 docker compose up -d --no-build --wait
 docker compose ps
+```
+
+CLIエージェントも起動する場合は、`.env` の連携設定を入力してから次を実行します。
+
+```bash
+docker compose --profile agent up -d --no-build --wait
+./scripts/claude-login.sh login
 ```
 
 新規環境の初回解除パスワードは次で確認します。
@@ -88,8 +97,9 @@ cd ai-jenkins-bundle-2.568.1-1
 ./install.sh
 ```
 
-`install.sh` は内包ファイルのSHA-256検証、`docker load`、Compose起動、
-ヘルスチェックを順番に実行します。Registryへの接続やイメージのビルドは不要です。
+`install.sh` はDocker/Compose、CPUアーキテクチャ、内包ファイルのSHA-256を検証し、
+`docker load`、Compose起動、ヘルスチェックを順番に実行します。Registryへの接続や
+イメージのビルドは不要です。
 Claude Codeエージェントも利用する場合は、同梱された`AGENT_INSTALL.md`に従って
 導入先PCでClaude Pro/Maxアカウントへログインし、`agent`プロファイルを起動します。
 

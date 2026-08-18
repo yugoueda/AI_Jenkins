@@ -37,11 +37,13 @@ cat /etc/os-release
 （例: `/opt/ai-review` または `~/ai-review`）へ置くことを推奨します。
 
 ```bash
-cp .env.example .env
-./scripts/jenkins-image.sh build
-docker compose up -d
-docker compose ps
+./scripts/check-jenkins-host.sh
+./scripts/setup-docker.sh
 ```
+
+`setup-docker.sh` は初回のみ `.env.example` から `.env` を作成し、Compose定義の検証、
+イメージのビルド、ヘルスチェック付き起動まで行います。WebhookとCLIエージェントも
+同時に構築する場合は `./scripts/setup-docker.sh --with-agent` を使います。
 
 起動完了後、WindowsまたはWSLのブラウザから
 <http://localhost:8080> を開きます。初回解除パスワードは次で確認できます。
@@ -151,17 +153,19 @@ GitLab用Credential IDは既定で`gitlab-token`です。別名を使う場合�
 JENKINS_IMAGE=registry.example.com/your-team/ai-jenkins:2.568.1-1
 ```
 
-Registryへログインした状態で、ビルド元からpushします。
+`.env` の `AGENT_IMAGE` も同じRegistry配下の名前に変更します。Registryへログインした
+状態で、ビルド元から両方のイメージをまとめてpushします。
 
 ```bash
-./scripts/jenkins-image.sh push
+./scripts/publish-images.sh
 ```
 
-導入先には `compose.yaml`、`.env`、空の `jenkins/certs/` だけを配置すれば、
-ビルドせずに取得して起動できます。
+導入先には `compose.yaml`、`.env`、空の `jenkins/certs/` を配置すれば、ビルドせずに
+取得して起動できます。CLIエージェントも使う場合は `scripts/claude-login.sh` もコピー
+してください。
 
 ```bash
-docker compose pull
+docker compose --profile agent pull
 docker compose up -d --no-build
 ```
 
