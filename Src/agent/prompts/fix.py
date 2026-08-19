@@ -16,11 +16,11 @@ FIX_SYSTEM = """\
 """
 
 
-def build_fix_prompt(finding_id: str) -> str:
+def build_fix_prompt(mr_id: str, finding_id: str) -> str:
     row = db.query_one(
         "SELECT file_path, line_start, line_end, description, fix_patch, fix_patch_sha256 "
-        "FROM findings WHERE id=:finding_id",
-        {"finding_id": finding_id},
+        "FROM findings WHERE mr_id=:mr_id AND id=:finding_id",
+        {"mr_id": mr_id, "finding_id": finding_id},
     )
     if row is None:
         raise ValueError(f"finding not found: {finding_id}")

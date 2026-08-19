@@ -21,7 +21,7 @@ def upgrade() -> None:
     op.create_table(
         "findings",
         sa.Column("id", sa.Text(), primary_key=True),
-        sa.Column("mr_id", sa.Text(), nullable=False),
+        sa.Column("mr_id", sa.Text(), primary_key=True),
         sa.Column("source", sa.Text(), nullable=False),
         sa.Column("status", sa.Text(), nullable=False),
         sa.Column("author", sa.Text(), nullable=True),

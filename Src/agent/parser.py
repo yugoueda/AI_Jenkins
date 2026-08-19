@@ -43,7 +43,8 @@ def parse_and_save_review(mr_id: str, raw_output: str) -> list[str]:
     saved_ids: list[str] = []
     max_n = db.query_scalar(
         "SELECT COALESCE(MAX(CAST(SUBSTR(id, 2) AS INTEGER)), 0) "
-        "FROM findings WHERE source='AI'",
+        "FROM findings WHERE mr_id=:mr_id AND source='AI'",
+        {"mr_id": mr_id},
     )
 
     for i, finding in enumerate(data.get("findings", []), start=1):

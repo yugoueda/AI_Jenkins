@@ -7,8 +7,9 @@ from .database import Base
 class Finding(Base):
     __tablename__ = "findings"
 
+    # 指摘ID（R1, R2, ...）はMRごとに採番する。
     id: Mapped[str] = mapped_column(Text, primary_key=True)
-    mr_id: Mapped[str] = mapped_column(Text, nullable=False)
+    mr_id: Mapped[str] = mapped_column(Text, primary_key=True)
     source: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     author: Mapped[str | None] = mapped_column(Text)

@@ -124,8 +124,8 @@ async def _handle_ai(
         _get_finding_or_error(mr_id, cmd.finding_id)
         db.execute(
             "UPDATE findings SET status='REJECTED', updated_at=CURRENT_TIMESTAMP "
-            "WHERE id=:finding_id",
-            {"finding_id": cmd.finding_id},
+            "WHERE mr_id=:mr_id AND id=:finding_id",
+            {"mr_id": mr_id, "finding_id": cmd.finding_id},
         )
         if not db.query_scalar(
             "SELECT COUNT(*) FROM findings "
