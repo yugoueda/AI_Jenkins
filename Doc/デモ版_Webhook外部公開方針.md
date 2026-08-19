@@ -90,16 +90,16 @@ GitLabでSigning tokenを利用できる場合は、本文のHMAC署名とWebhoo
 
 ## 4. 開発項目と完了条件
 
-| 項目 | 現在の状態 | デモ公開前の完了条件 |
-|---|---|---|
-| localhost限定公開 | 実装済み | `WEBHOOK_HTTP_HOST=127.0.0.1`を維持 |
-| Secret Token検証 | 実装済み | `change-me`を廃止し、十分に長い乱数へ変更 |
-| ngrokサービス | 未実装 | Webhookと同じ内部ネットワークへComposeサービスとして追加 |
-| ngrok Edge検証 | 未実装 | パス・メソッド・GitLab Secret Token・追加認証を検証 |
-| リクエストサイズ／レート制限 | 未実装 | 上限超過時に処理せず、適切なHTTPエラーを返す |
-| project ID許可リスト | 未実装 | デモ対象以外のproject IDを拒否 |
-| 冪等性／リプレイ対策 | 未実装 | Webhook ID重複排除。可能ならHMACとtimestampも検証 |
-| 運用手順 | 未実装 | 起動、疎通確認、停止、失効、ログ確認手順を文書化 |
+| 項目                         | 現在の状態 | デモ公開前の完了条件                                     |
+| ---------------------------- | ---------- | -------------------------------------------------------- |
+| localhost限定公開            | 実装済み   | `WEBHOOK_HTTP_HOST=127.0.0.1`を維持                    |
+| Secret Token検証             | 実装済み   | `change-me`を廃止し、十分に長い乱数へ変更              |
+| ngrokサービス                | 未実装     | Webhookと同じ内部ネットワークへComposeサービスとして追加 |
+| ngrok Edge検証               | 未実装     | パス・メソッド・GitLab Secret Token・追加認証を検証      |
+| リクエストサイズ／レート制限 | 未実装     | 上限超過時に処理せず、適切なHTTPエラーを返す             |
+| project ID許可リスト         | 未実装     | デモ対象以外のproject IDを拒否                           |
+| 冪等性／リプレイ対策         | 未実装     | Webhook ID重複排除。可能ならHMACとtimestampも検証        |
+| 運用手順                     | 未実装     | 起動、疎通確認、停止、失効、ログ確認手順を文書化         |
 
 公開前に、認証情報なし・不正な認証情報・許可外project ID・過大な本文・重複した
 Webhookが拒否または安全に無視されることを自動テストする。
@@ -162,15 +162,15 @@ Jenkinsや管理画面へ到達できないルーティングにする。
 
 ## 6. 環境別の最終形
 
-| 項目 | デモ版 | 社内運用版 |
-|---|---|---|
-| GitLab | GitLab.com個人リポジトリ | 社内セルフホストGitLab |
-| 公開経路 | ngrok HTTPS Tunnel | 社内リバースプロキシを推奨 |
-| ホストの受信ポート | localhostのみ | 社内NICのTLSポートのみ |
-| インターネット公開 | デモ実施中だけ有効 | 原則なし |
-| 主な接続制限 | ngrok認証 + Secret Token + project ID | 送信元制限／mTLS + Secret Token + project ID |
-| TLS | ngrokで終端 | 社内CA証明書で終端 |
-| URL | `https://<domain>.ngrok.app/webhook` | `https://<internal-fqdn>/webhook` |
+| 項目               | デモ版                                 | 社内運用版                                   |
+| ------------------ | -------------------------------------- | -------------------------------------------- |
+| GitLab             | GitLab.com個人リポジトリ               | 社内セルフホストGitLab                       |
+| 公開経路           | ngrok HTTPS Tunnel                     | 社内リバースプロキシを推奨                   |
+| ホストの受信ポート | localhostのみ                          | 社内NICのTLSポートのみ                       |
+| インターネット公開 | デモ実施中だけ有効                     | 原則なし                                     |
+| 主な接続制限       | ngrok認証 + Secret Token + project ID  | 送信元制限／mTLS + Secret Token + project ID |
+| TLS                | ngrokで終端                            | 社内CA証明書で終端                           |
+| URL                | `https://<domain>.ngrok.app/webhook` | `https://<internal-fqdn>/webhook`          |
 
 ## 7. 参考資料
 
