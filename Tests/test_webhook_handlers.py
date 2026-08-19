@@ -62,11 +62,16 @@ def test_reject_updates_finding_and_starts_re_review_build(
 ) -> None:
     _insert_finding(isolated_database)
     calls = []
+    messages = []
 
     async def schedule(**kwargs):
         calls.append(kwargs)
 
+    async def comment(*args):
+        messages.append(args)
+
     monkeypatch.setattr(note, "schedule_build", schedule)
+    monkeypatch.setattr(note.gitlab, "post_comment", comment)
     payload = _note_payload("/ai reject R1")
     payload["merge_request"]["last_commit"] = {"id": "latest-sha"}
 
@@ -76,7 +81,11 @@ def test_reject_updates_finding_and_starts_re_review_build(
         "SELECT status FROM findings WHERE id='R1'"
     ) == "REJECTED"
     assert calls[0]["commit_sha"] == "latest-sha"
-    assert calls[0]["review_event_type"] == "RE_REVIEW"
+    assert calls[0]["review_event_type"] == "POST_RESOLUTION"
+    assert messages == [
+        ("42", "7", "✅ R1 の指摘を却下しました。"),
+        ("42", "7", "🔄 全指摘の対応が完了したため、再レビュー用ビルドを開始しました。"),
+    ]
 
 
 def test_test_command_enqueues_unit_test_job(isolated_database) -> None:

@@ -1,6 +1,10 @@
 import pytest
 
-from Src.agent.parser import parse_and_save_review, parse_and_save_unit_tests
+from Src.agent.parser import (
+    applied_finding_ranges,
+    parse_and_save_review,
+    parse_and_save_unit_tests,
+)
 from Src.agent.prompts.review import REVIEW_SYSTEM
 
 
@@ -55,6 +59,26 @@ def test_review_parser_restarts_finding_numbers_for_each_mr(
     assert parse_and_save_review("7", review) == ["R1"]
     assert parse_and_save_review("8", review) == ["R1"]
     assert parse_and_save_review("7", review) == ["R2"]
+
+
+def test_re_review_skips_findings_overlapping_applied_ai_fixes(
+    isolated_database,
+) -> None:
+    isolated_database.execute(
+        "INSERT INTO findings "
+        "(id, mr_id, source, status, file_path, line_start, line_end) "
+        "VALUES ('R1', '7', 'AI', 'APPLIED', 'lib/cart.dart', 10, 12)"
+    )
+    review = """{"findings":[
+        {"file":"lib/cart.dart","line_start":11,"line_end":11,"description":"same"},
+        {"file":"lib/cart.dart","line_start":20,"line_end":20,"description":"new"}
+    ]}"""
+
+    finding_ids = parse_and_save_review(
+        "7", review, applied_finding_ranges("7")
+    )
+
+    assert finding_ids == ["R2"]
 
 
 def test_review_prompt_requires_japanese_findings() -> None:

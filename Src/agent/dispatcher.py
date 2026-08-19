@@ -4,14 +4,25 @@ import logging
 
 from .checkpoints import get_review_checkpoint, save_review_checkpoint
 from .prompts import build_fix as build_fix_prompt
-from .parser import parse_and_save_review, parse_and_save_unit_tests
+from .prompts.fix import build_patch_rebase_prompt
+from .parser import (
+    applied_finding_ranges,
+    parse_and_save_review,
+    parse_and_save_unit_tests,
+)
 from .prompts import review as review_prompt
 from .prompts import unit_test as unit_test_prompt
 from .runner import run_agent
 from .workspace import prepare_workspace
 from ..db.Src import database as db
 from ..gitlab import comments as gitlab_comments
-from ..gitlab.commits import PatchError, commit_generated_files, commit_patch
+from ..gitlab.commits import (
+    PatchApplyError,
+    PatchError,
+    commit_generated_files,
+    commit_patch,
+    patch_paths,
+)
 from ..jenkins.client import JenkinsError, trigger_test
 from ..jenkins.orchestrator import schedule_build
 from ..webhook.queue import enqueue
@@ -64,7 +75,13 @@ async def dispatch(job: dict) -> None:
         returncode, output = await run_agent(prompt, event_type, working_directory)
         if returncode == 0:
             try:
-                finding_ids = parse_and_save_review(mr_id, output)
+                finding_ids = parse_and_save_review(
+                    mr_id,
+                    output,
+                    applied_finding_ranges(mr_id)
+                    if event_type == "RE_REVIEW"
+                    else None,
+                )
             except (TypeError, ValueError) as exc:
                 await _handle_failure(project_id, mr_id, event_type, str(exc))
             await _require_project(project_id)
@@ -92,7 +109,7 @@ async def dispatch(job: dict) -> None:
     if event_type in ("APPLY", "APPROVE"):
         finding_id = payload["finding_id"]
         row = db.query_one(
-            "SELECT fix_patch, fix_patch_sha256 FROM findings "
+            "SELECT description, fix_patch, fix_patch_sha256 FROM findings "
             "WHERE id=:finding_id AND mr_id=:mr_id AND status='OPEN'",
             {"finding_id": finding_id, "mr_id": mr_id},
         )
@@ -127,6 +144,7 @@ async def dispatch(job: dict) -> None:
                     event_type,
                     "source branch is missing",
                 )
+            rebased = False
             try:
                 commit_sha = await commit_patch(
                     project_id,
@@ -135,12 +153,52 @@ async def dispatch(job: dict) -> None:
                     patch,
                     working_directory,
                 )
+            except PatchApplyError:
+                try:
+                    original_paths = sorted(patch_paths(patch))
+                    prompt = build_patch_rebase_prompt(
+                        finding_id,
+                        str(row["description"] or ""),
+                        original_paths,
+                        patch,
+                    )
+                    returncode, rebased_patch = await run_agent(
+                        prompt,
+                        "PATCH_REBASE",
+                        working_directory,
+                    )
+                    if returncode != 0:
+                        raise PatchError(
+                            "latest-source patch regeneration failed: "
+                            f"{rebased_patch}"
+                        )
+                    rebased_patch = _strip_diff_fence(rebased_patch)
+                    if patch_paths(rebased_patch) != frozenset(original_paths):
+                        raise PatchError(
+                            "regenerated patch changes files outside the original patch"
+                        )
+                    commit_sha = await commit_patch(
+                        project_id,
+                        source_branch,
+                        finding_id,
+                        rebased_patch,
+                        working_directory,
+                    )
+                except PatchError as exc:
+                    await _handle_failure(project_id, mr_id, event_type, str(exc))
+                rebased = True
             except PatchError as exc:
                 await _handle_failure(
                     project_id,
                     mr_id,
                     event_type,
                     str(exc),
+                )
+            if rebased:
+                await gitlab_comments.post_comment(
+                    project_id,
+                    mr_id,
+                    f"ℹ️ {finding_id} は先行修正で文脈が変わっていたため、最新ブランチ向けに差分を再構成して適用しました。",
                 )
             db.execute(
                 "UPDATE findings SET status='APPLIED', updated_at=CURRENT_TIMESTAMP "
@@ -172,7 +230,7 @@ async def dispatch(job: dict) -> None:
                             target_branch=target_branch,
                             commit_sha=commit_sha,
                             repository_url=str(payload.get("repository_url") or ""),
-                            review_event_type="RE_REVIEW",
+                            review_event_type="POST_RESOLUTION",
                         )
                     except JenkinsError as exc:
                         await gitlab_comments.post_comment(
@@ -245,6 +303,14 @@ def _ci_result(payload: dict, name: str) -> str | None:
     if result is None and not log:
         return None
     return f"status: {result or 'UNKNOWN'}\n\nlog:\n{log or '（ログなし）'}"
+
+
+def _strip_diff_fence(output: str) -> str:
+    """Remove Markdown code-fence lines from an otherwise raw agent diff."""
+    lines = output.splitlines(keepends=True)
+    return "".join(
+        line for line in lines if not line.lstrip().startswith("```")
+    )
 
 
 async def _post_comment(project_id: str, mr_id: str, message: str) -> None:

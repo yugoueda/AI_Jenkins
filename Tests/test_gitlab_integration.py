@@ -10,7 +10,7 @@ from Src.gitlab.comments import (
     post_review_findings,
 )
 from Src.gitlab.client import GitLabError
-from Src.gitlab.commits import PatchError, commit_patch
+from Src.gitlab.commits import PatchApplyError, PatchError, commit_patch, patch_paths
 from Src.gitlab.discussions import all_discussions_resolved
 from Src.db.Src import database as db
 
@@ -245,6 +245,58 @@ def test_commit_patch_repairs_incorrect_hunk_counts(
     ]
 
 
+def test_commit_patch_accepts_multiple_files_without_diff_git_headers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("old first\n")
+    second.write_text("old second\n")
+    subprocess.run(["git", "add", "first.txt", "second.txt"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "initial",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    requests = []
+
+    async def fake_request(method, path, **kwargs):
+        requests.append((method, path, kwargs))
+        return httpx.Response(201, json={})
+
+    monkeypatch.setattr("Src.gitlab.commits.request", fake_request)
+    patch = """--- a/first.txt
++++ b/first.txt
+@@ -1 +1 @@
+-old first
++new first
+--- a/second.txt
++++ b/second.txt
+@@ -1 +1 @@
+-old second
++new second
+"""
+
+    asyncio.run(commit_patch("42", "feature", "R1", patch, str(tmp_path)))
+
+    assert requests[0][2]["json"]["actions"] == [
+        {"action": "update", "file_path": "first.txt", "content": "new first\n"},
+        {"action": "update", "file_path": "second.txt", "content": "new second\n"},
+    ]
+
+
 def test_commit_patch_rejects_unsafe_paths(tmp_path: Path) -> None:
     patch = """--- a/../secret
 +++ b/../secret
@@ -258,6 +310,48 @@ def test_commit_patch_rejects_unsafe_paths(tmp_path: Path) -> None:
         assert "unsafe path" in str(exc)
     else:
         raise AssertionError("unsafe patch was accepted")
+
+
+def test_commit_patch_marks_context_mismatch_as_recoverable(tmp_path: Path) -> None:
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    source = tmp_path / "example.txt"
+    source.write_text("current\n")
+    subprocess.run(["git", "add", "example.txt"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            "initial",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    patch = "--- a/example.txt\n+++ b/example.txt\n@@ -1 +1 @@\n-old\n+new\n"
+
+    try:
+        asyncio.run(commit_patch("42", "feature", "R1", patch, str(tmp_path)))
+    except PatchApplyError:
+        pass
+    else:
+        raise AssertionError("stale patch was not identified")
+
+
+def test_patch_paths_rejects_unsafe_paths() -> None:
+    patch = "--- a/../secret\n+++ b/../secret\n@@ -1 +1 @@\n-old\n+new\n"
+
+    try:
+        patch_paths(patch)
+    except PatchError:
+        pass
+    else:
+        raise AssertionError("unsafe path was accepted")
 
 
 def test_commit_patch_accepts_metadata_only_delete(

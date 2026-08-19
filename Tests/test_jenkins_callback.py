@@ -165,3 +165,32 @@ def test_successful_re_review_build_enqueues_re_review(
     assert isolated_database.query_scalar(
         "SELECT event_type FROM job_queue"
     ) == "RE_REVIEW"
+
+
+def test_successful_post_resolution_build_enqueues_test_generation(
+    isolated_database, monkeypatch
+) -> None:
+    monkeypatch.setenv("JENKINS_CALLBACK_TOKEN", "callback-secret")
+    common = {
+        "project_id": "42",
+        "mr_id": "7",
+        "commit_sha": "abc123",
+        "source_branch": "feature/example",
+        "target_branch": "main",
+        "repository_url": "https://gitlab.example/repo.git",
+        "review_event_type": "POST_RESOLUTION",
+    }
+    assert reserve_ci_run(**common) == "TRIGGERING"
+    mark_ci_run_running("42", "7", "abc123", "POST_RESOLUTION")
+
+    response = TestClient(app).post(
+        "/internal/jenkins/result",
+        headers=_headers(),
+        json=_payload(),
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {"status": "queued", "event_type": "UNIT_TEST_GEN"}
+    assert isolated_database.query_scalar(
+        "SELECT event_type FROM job_queue"
+    ) == "UNIT_TEST_GEN"

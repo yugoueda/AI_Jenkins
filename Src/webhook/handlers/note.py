@@ -127,6 +127,11 @@ async def _handle_ai(
             "WHERE mr_id=:mr_id AND id=:finding_id",
             {"mr_id": mr_id, "finding_id": cmd.finding_id},
         )
+        await gitlab.post_comment(
+            project_id,
+            mr_id,
+            f"✅ {cmd.finding_id} の指摘を却下しました。",
+        )
         if not db.query_scalar(
             "SELECT COUNT(*) FROM findings "
             "WHERE mr_id=:mr_id AND status='OPEN'",
@@ -147,13 +152,19 @@ async def _handle_ai(
                     target_branch=target_branch,
                     commit_sha=commit_sha,
                     repository_url=repository_url,
-                    review_event_type="RE_REVIEW",
+                    review_event_type="POST_RESOLUTION",
                 )
             except JenkinsError as exc:
                 await _post_error(
                     project_id,
                     mr_id,
                     f"再レビュー用ビルドを開始できません: {exc}",
+                )
+            else:
+                await gitlab.post_comment(
+                    project_id,
+                    mr_id,
+                    "🔄 全指摘の対応が完了したため、再レビュー用ビルドを開始しました。",
                 )
         return
 

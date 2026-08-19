@@ -35,7 +35,7 @@ async def _run_once(
         "--max-turns",
         max_turns,
     ]
-    if event_type in ("REVIEW", "RE_REVIEW", "UNIT_TEST_GEN"):
+    if event_type in ("REVIEW", "RE_REVIEW", "UNIT_TEST_GEN", "PATCH_REBASE"):
         command.extend(
             ["--disallowedTools", "Write", "Edit", "NotebookEdit"]
         )

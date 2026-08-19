@@ -84,7 +84,7 @@ class CiRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "review_event_type IN ('REVIEW', 'RE_REVIEW')",
+            "review_event_type IN ('REVIEW', 'RE_REVIEW', 'POST_RESOLUTION')",
             name="ck_ci_runs_review_event_type",
         ),
         CheckConstraint(

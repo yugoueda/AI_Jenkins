@@ -38,7 +38,40 @@ def _extract_json(raw_output: str) -> dict:
     raise ValueError(f"agent returned invalid review JSON{detail}")
 
 
-def parse_and_save_review(mr_id: str, raw_output: str) -> list[str]:
+def applied_finding_ranges(mr_id: str) -> dict[str, list[tuple[int, int]]]:
+    rows = db.query_all(
+        "SELECT file_path, line_start, line_end FROM findings "
+        "WHERE mr_id=:mr_id AND source='AI' AND status='APPLIED' "
+        "AND file_path IS NOT NULL AND line_start IS NOT NULL",
+        {"mr_id": mr_id},
+    )
+    ranges: dict[str, list[tuple[int, int]]] = {}
+    for row in rows:
+        start = int(row["line_start"])
+        end = int(row["line_end"] or start)
+        ranges.setdefault(str(row["file_path"]), []).append((start, end))
+    return ranges
+
+
+def _overlaps_applied_finding(
+    finding: dict, applied_ranges: dict[str, list[tuple[int, int]]]
+) -> bool:
+    file_path = finding.get("file")
+    start = finding.get("line_start")
+    if not file_path or start is None:
+        return False
+    end = finding.get("line_end") or start
+    return any(
+        int(start) <= applied_end and int(end) >= applied_start
+        for applied_start, applied_end in applied_ranges.get(str(file_path), [])
+    )
+
+
+def parse_and_save_review(
+    mr_id: str,
+    raw_output: str,
+    applied_ranges: dict[str, list[tuple[int, int]]] | None = None,
+) -> list[str]:
     data = _extract_json(raw_output)
     saved_ids: list[str] = []
     max_n = db.query_scalar(
@@ -47,8 +80,10 @@ def parse_and_save_review(mr_id: str, raw_output: str) -> list[str]:
         {"mr_id": mr_id},
     )
 
-    for i, finding in enumerate(data.get("findings", []), start=1):
-        finding_id = f"R{int(max_n or 0) + i}"
+    for finding in data.get("findings", []):
+        if applied_ranges and _overlaps_applied_finding(finding, applied_ranges):
+            continue
+        finding_id = f"R{int(max_n or 0) + len(saved_ids) + 1}"
         fix_patch = finding.get("fix_patch")
         fix_patch_sha256 = (
             hashlib.sha256(fix_patch.encode()).hexdigest() if fix_patch else None

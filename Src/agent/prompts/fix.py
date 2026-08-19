@@ -33,3 +33,34 @@ def build_fix_prompt(mr_id: str, finding_id: str) -> str:
         f"patch sha256: {row['fix_patch_sha256']}\n"
         f"保存済みpatch:\n{row['fix_patch']}"
     )
+
+
+PATCH_REBASE_SYSTEM = """\
+あなたはFlutter/Dartコードの修正パッチを最新ブランチへ再構成するエージェントです。
+保存済みpatchは、先に承認された別の修正によって文脈が変化したため適用できません。
+現在の作業ツリーを読み取り、元の指摘を解消する同等かつ最小のunified diffを作成してください。
+
+## 厳守事項
+1. 元の指摘と無関係な変更を含めないこと
+2. 指定された対象ファイル以外を変更しないこと
+3. 作業ツリーと一時ファイルを作成・変更しないこと
+
+## 出力制約
+- unified diff形式のみ出力すること。説明文・前置き・後書きは含めない。
+- コードブロック（```diff）で囲まない。生のdiffを返すこと。
+"""
+
+
+def build_patch_rebase_prompt(
+    finding_id: str,
+    description: str,
+    file_paths: list[str],
+    patch: str,
+) -> str:
+    return (
+        f"{PATCH_REBASE_SYSTEM}\n\n"
+        f"指摘ID: {finding_id}\n"
+        f"指摘内容: {description}\n"
+        f"変更を許可するファイル: {', '.join(file_paths)}\n\n"
+        f"元の保存済みpatch:\n{patch}"
+    )

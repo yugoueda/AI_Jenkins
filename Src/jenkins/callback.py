@@ -122,5 +122,8 @@ async def _handle_build_result(
             "`/ai review` でレビューを開始してください。",
         )
         return {"status": "reported", "event_type": "LINT_FAILED"}
-    enqueue(result.mr_id, review_event_type, payload)
-    return {"status": "queued", "event_type": review_event_type}
+    event_type = (
+        "UNIT_TEST_GEN" if review_event_type == "POST_RESOLUTION" else review_event_type
+    )
+    enqueue(result.mr_id, event_type, payload)
+    return {"status": "queued", "event_type": event_type}

@@ -9,6 +9,10 @@ class PatchError(RuntimeError):
     pass
 
 
+class PatchApplyError(PatchError):
+    """A valid patch no longer matches the checked-out source."""
+
+
 _HUNK_HEADER = re.compile(
     r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$"
 )
@@ -31,7 +35,11 @@ def _normalize_hunk_counts(patch: str) -> str:
         new_count = 0
         while end < len(lines):
             line = lines[end]
-            if line.startswith(("@@ ", "diff --git ")):
+            if line.startswith(("@@ ", "diff --git ")) or (
+                line.startswith("--- ")
+                and end + 1 < len(lines)
+                and lines[end + 1].startswith("+++ ")
+            ):
                 break
             if line in ("\n", "\r\n", ""):
                 # A bare blank line in a hunk is intended as an unchanged
@@ -93,10 +101,21 @@ def _patch_files(patch: str) -> list[tuple[str | None, str | None]]:
 def _file_patch_sections(patch: str) -> list[str]:
     lines = patch.splitlines(keepends=True)
     starts = [i for i, line in enumerate(lines) if line.startswith("diff --git ")]
-    if not starts:
-        return [patch]
-    if any(line.strip() for line in lines[: starts[0]]):
-        raise PatchError("patch contains content before the first file header")
+    if starts:
+        if any(line.strip() for line in lines[: starts[0]]):
+            raise PatchError("patch contains content before the first file header")
+    else:
+        # Agents often omit optional `diff --git` lines. Split adjacent
+        # ---/+++ file-header pairs so each file still receives its own
+        # validation and GitLab commit action.
+        starts = [
+            index
+            for index in range(len(lines) - 1)
+            if lines[index].startswith("--- ")
+            and lines[index + 1].startswith("+++ ")
+        ]
+        if not starts:
+            return [patch]
     starts.append(len(lines))
     return ["".join(lines[start:end]) for start, end in zip(starts, starts[1:])]
 
@@ -117,6 +136,12 @@ def _prepare_patch(patch: str) -> tuple[list[tuple[str | None, str | None]], str
             continue
         applicable_sections.append(section)
     return files, "".join(applicable_sections)
+
+
+def patch_paths(patch: str) -> frozenset[str]:
+    """Return every repository path a patch is allowed to change."""
+    files, _ = _prepare_patch(patch)
+    return frozenset(path for pair in files for path in pair if path)
 
 
 def _run_git(workspace: Path, args: list[str], patch: str | None = None) -> None:
@@ -156,7 +181,10 @@ async def commit_patch(
         raise PatchError("patch target files contain local changes")
 
     if applicable_patch:
-        _run_git(root, ["apply", "--check", "-"], applicable_patch)
+        try:
+            _run_git(root, ["apply", "--check", "-"], applicable_patch)
+        except PatchError as exc:
+            raise PatchApplyError(str(exc)) from exc
         _run_git(root, ["apply", "-"], applicable_patch)
     try:
         actions = []

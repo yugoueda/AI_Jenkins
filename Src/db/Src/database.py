@@ -42,6 +42,14 @@ def query_one(sql: str, params: dict | None = None) -> dict | None:
         return dict(row) if row else None
 
 
+def query_all(sql: str, params: dict | None = None) -> list[dict]:
+    with engine.begin() as conn:
+        return [
+            dict(row)
+            for row in conn.execute(text(sql), params or {}).mappings().all()
+        ]
+
+
 def query_scalar(sql: str, params: dict | None = None):
     with engine.begin() as conn:
         return conn.execute(text(sql), params or {}).scalar()

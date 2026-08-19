@@ -88,7 +88,7 @@ def test_approve_commits_patch_and_updates_status(
         "SELECT status FROM findings WHERE id='R1'"
     ) == "APPLIED"
     assert builds[0]["commit_sha"] == "new-sha"
-    assert builds[0]["review_event_type"] == "RE_REVIEW"
+    assert builds[0]["review_event_type"] == "POST_RESOLUTION"
 
 
 def test_approve_posts_patch_failure(
@@ -117,6 +117,49 @@ def test_approve_posts_patch_failure(
     assert messages == [
         "⚠️ APPROVE ジョブに失敗しました: git apply --check failed"
     ]
+
+
+def test_approve_regenerates_stale_patch_on_latest_source(
+    isolated_database, monkeypatch, tmp_path
+) -> None:
+    patch = "--- a/lib/cart.dart\n+++ b/lib/cart.dart\n@@ -1 +1 @@\n-old\n+new\n"
+    rebased_patch = (
+        "--- a/lib/cart.dart\n+++ b/lib/cart.dart\n@@ -1 +1 @@\n-current\n+new\n"
+    )
+    _insert_finding(isolated_database, patch)
+    _use_workspace(monkeypatch, tmp_path)
+    commits = []
+    prompts = []
+
+    async def commit(*args):
+        commits.append(args)
+        if len(commits) == 1:
+            raise dispatcher.PatchApplyError("patch does not apply")
+        return "new-sha"
+
+    async def agent(prompt, event_type, workspace):
+        prompts.append((prompt, event_type, workspace))
+        return 0, f"```diff\n{rebased_patch}```\n"
+
+    async def comment(*args):
+        return None
+
+    async def schedule(**kwargs):
+        return "STARTED"
+
+    monkeypatch.setattr(dispatcher, "commit_patch", commit)
+    monkeypatch.setattr(dispatcher, "run_agent", agent)
+    monkeypatch.setattr(dispatcher.gitlab_comments, "post_comment", comment)
+    monkeypatch.setattr(dispatcher, "schedule_build", schedule)
+
+    asyncio.run(dispatcher.dispatch(_job("APPROVE", {"finding_id": "R1"})))
+
+    assert commits[1][3] == rebased_patch
+    assert prompts[0][1] == "PATCH_REBASE"
+    assert "lib/cart.dart" in prompts[0][0]
+    assert isolated_database.query_scalar(
+        "SELECT status FROM findings WHERE id='R1'"
+    ) == "APPLIED"
 
 
 def test_clean_re_review_enqueues_unit_test_generation(
