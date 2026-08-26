@@ -1,6 +1,8 @@
 import hashlib
 import json
 import logging
+import asyncio
+import os
 
 from .checkpoints import get_review_checkpoint, save_review_checkpoint
 from .prompts import build_fix as build_fix_prompt
@@ -9,6 +11,7 @@ from .parser import (
     applied_finding_ranges,
     parse_and_save_review,
     parse_and_save_unit_tests,
+    validate_review_output,
 )
 from .prompts import review as review_prompt
 from .prompts import unit_test as unit_test_prompt
@@ -30,6 +33,44 @@ from ..webhook.queue import enqueue
 
 class AgentExecutionError(RuntimeError):
     pass
+
+
+logger = logging.getLogger(__name__)
+
+
+async def _run_review_with_json_retry(
+    prompt: str,
+    event_type: str,
+    working_directory: str,
+) -> tuple[int, str]:
+    """Retry review generation when a successful CLI call returns invalid JSON."""
+    attempts = max(1, int(os.getenv("AGENT_MAX_ATTEMPTS", "2")))
+    retry_prompt = prompt
+    last_error = "agent returned invalid review JSON"
+
+    for attempt in range(1, attempts + 1):
+        returncode, output = await run_agent(retry_prompt, event_type, working_directory)
+        if returncode != 0:
+            return returncode, output
+        try:
+            validate_review_output(output)
+        except ValueError as exc:
+            last_error = str(exc)
+            logger.warning(
+                "Invalid review JSON: event_type=%s attempt=%d/%d error=%s",
+                event_type,
+                attempt,
+                attempts,
+                last_error,
+            )
+            if attempt == attempts:
+                break
+            retry_prompt = review_prompt.build_review_retry_prompt(prompt)
+            await asyncio.sleep(min(attempt, 3))
+        else:
+            return 0, output
+
+    return 1, last_error
 
 
 async def dispatch(job: dict) -> None:
@@ -72,18 +113,17 @@ async def dispatch(job: dict) -> None:
             target_branch=target_branch,
             base_commit=base_commit,
         )
-        returncode, output = await run_agent(prompt, event_type, working_directory)
+        returncode, output = await _run_review_with_json_retry(
+            prompt, event_type, working_directory
+        )
         if returncode == 0:
-            try:
-                finding_ids = parse_and_save_review(
-                    mr_id,
-                    output,
-                    applied_finding_ranges(mr_id)
-                    if event_type == "RE_REVIEW"
-                    else None,
-                )
-            except (TypeError, ValueError) as exc:
-                await _handle_failure(project_id, mr_id, event_type, str(exc))
+            finding_ids = parse_and_save_review(
+                mr_id,
+                output,
+                applied_finding_ranges(mr_id)
+                if event_type == "RE_REVIEW"
+                else None,
+            )
             await _require_project(project_id)
             await gitlab_comments.post_review_findings(
                 project_id,

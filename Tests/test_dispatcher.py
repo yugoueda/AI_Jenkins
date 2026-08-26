@@ -3,6 +3,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from Src.agent import dispatcher
 
 
@@ -263,6 +265,65 @@ def test_failed_review_does_not_advance_checkpoint(
         raise AssertionError("invalid review did not fail")
 
     assert dispatcher.get_review_checkpoint("42", "7") == "old-sha"
+
+
+def test_review_retries_invalid_json_and_posts_only_second_result(
+    isolated_database, monkeypatch, tmp_path
+) -> None:
+    _use_workspace(monkeypatch, tmp_path)
+    monkeypatch.setenv("AGENT_MAX_ATTEMPTS", "2")
+    prompts = []
+    posted = []
+    outputs = iter(["{\"findings\":[{bad}]}", '{"findings": []}'])
+
+    async def run_agent(prompt, *args):
+        prompts.append(prompt)
+        return 0, next(outputs)
+
+    async def post_review(*args):
+        posted.append(args)
+
+    monkeypatch.setattr(dispatcher, "run_agent", run_agent)
+    monkeypatch.setattr(
+        dispatcher.review_prompt,
+        "build_review_prompt_with_ci",
+        lambda *args, **kwargs: "review prompt",
+    )
+    monkeypatch.setattr(dispatcher.gitlab_comments, "post_review_findings", post_review)
+
+    asyncio.run(dispatcher.dispatch(_job("REVIEW")))
+
+    assert len(prompts) == 2
+    assert "出力形式の再確認" in prompts[1]
+    assert len(posted) == 1
+
+
+def test_review_fails_after_invalid_json_retries_are_exhausted(
+    isolated_database, monkeypatch, tmp_path
+) -> None:
+    _use_workspace(monkeypatch, tmp_path)
+    monkeypatch.setenv("AGENT_MAX_ATTEMPTS", "2")
+    calls = []
+
+    async def run_agent(prompt, *args):
+        calls.append(prompt)
+        return 0, "{\"findings\":[{bad}]}"
+
+    async def comment(*args):
+        return None
+
+    monkeypatch.setattr(dispatcher, "run_agent", run_agent)
+    monkeypatch.setattr(
+        dispatcher.review_prompt,
+        "build_review_prompt_with_ci",
+        lambda *args, **kwargs: "review prompt",
+    )
+    monkeypatch.setattr(dispatcher.gitlab_comments, "post_comment", comment)
+
+    with pytest.raises(dispatcher.AgentExecutionError, match="invalid review JSON"):
+        asyncio.run(dispatcher.dispatch(_job("REVIEW")))
+
+    assert len(calls) == 2
 
 
 def test_unit_test_generation_commits_and_starts_jenkins(

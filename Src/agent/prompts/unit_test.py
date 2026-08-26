@@ -16,6 +16,17 @@ UNIT_TEST_SYSTEM = """\
 3. 境界値テスト: null・空文字・最大値・最小値を網羅
 4. 分岐網羅: カバレッジ未達の分岐を優先的にテスト
 
+## Flutter Widget Testの必須条件
+- `showDialog`、`Navigator`、`ScaffoldMessenger`を呼ぶ場合は、`MaterialApp`配下の
+  `Builder`が提供する`BuildContext`を使用する。`MaterialApp`を返すStatefulWidget自身の
+  `BuildContext`を渡してはいけない。
+- 対象アプリの`pubspec.yaml`にある既存アセットだけを参照する。存在しない画像名を
+  テストデータへ設定せず、不要なら画像を描画しないテストデータを選ぶ。
+- 画面幅に依存するWidgetを描画する場合は、テスト開始時に十分な`tester.view.physicalSize`を
+  設定し、`addTearDown`で`resetPhysicalSize`と`resetDevicePixelRatio`を必ず呼ぶ。
+- `MaterialApp`には対象アプリが要求するローカライゼーションdelegateとsupportedLocalesを
+  設定し、生成後にダイアログ・アセット・RenderFlex overflowが起きないことを確認する。
+
 ## 出力制約
 - 作業ツリーや一時ファイルを作成・変更しない。Write/Edit系ツールを使用しない。
 - 生成したテストコードは必ず標準出力へ返す。説明文は含めない。

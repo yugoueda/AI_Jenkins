@@ -35,6 +35,12 @@ REVIEW_SYSTEM = """\
 }
 """
 
+RETRY_JSON_INSTRUCTIONS = """\
+前回の出力はJSONとして解析できませんでした。レビューを再確認し、JSONオブジェクトだけを
+最初の `{` から最後の `}` まで出力してください。JSON文字列内の改行は `\\n`、二重引用符は
+`\\"` としてエスケープし、Markdownコードブロックや説明文は含めないでください。
+"""
+
 
 def build_review_prompt(
     mr_id: str,
@@ -75,3 +81,7 @@ def build_review_prompt_with_ci(
         f"## 静的解析結果\n{lint_result or '（静的解析結果なし）'}\n\n"
         "上記のビルド/静的解析結果もレビュー根拠に含め、必要な修正提案を出力してください。"
     )
+
+
+def build_review_retry_prompt(prompt: str) -> str:
+    return f"{prompt}\n\n## 出力形式の再確認\n{RETRY_JSON_INSTRUCTIONS}"

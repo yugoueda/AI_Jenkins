@@ -38,6 +38,32 @@ def _extract_json(raw_output: str) -> dict:
     raise ValueError(f"agent returned invalid review JSON{detail}")
 
 
+def validate_review_output(raw_output: str) -> dict:
+    """Parse a review response and reject values that cannot be persisted safely."""
+    data = _extract_json(raw_output)
+    for index, finding in enumerate(data["findings"]):
+        if not isinstance(finding, dict):
+            raise ValueError(f"agent returned invalid review JSON: findings[{index}] is not an object")
+        for field in ("file", "description", "fix_patch"):
+            value = finding.get(field)
+            if value is not None and not isinstance(value, str):
+                raise ValueError(
+                    f"agent returned invalid review JSON: findings[{index}].{field} is not a string"
+                )
+        for field in ("line_start", "line_end"):
+            value = finding.get(field)
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+                raise ValueError(
+                    f"agent returned invalid review JSON: findings[{index}].{field} is not an integer"
+                )
+        suggestion = finding.get("suggestion")
+        if suggestion is not None and not isinstance(suggestion, dict):
+            raise ValueError(
+                f"agent returned invalid review JSON: findings[{index}].suggestion is not an object"
+            )
+    return data
+
+
 def applied_finding_ranges(mr_id: str) -> dict[str, list[tuple[int, int]]]:
     rows = db.query_all(
         "SELECT file_path, line_start, line_end FROM findings "
@@ -72,7 +98,7 @@ def parse_and_save_review(
     raw_output: str,
     applied_ranges: dict[str, list[tuple[int, int]]] | None = None,
 ) -> list[str]:
-    data = _extract_json(raw_output)
+    data = validate_review_output(raw_output)
     saved_ids: list[str] = []
     max_n = db.query_scalar(
         "SELECT COALESCE(MAX(CAST(SUBSTR(id, 2) AS INTEGER)), 0) "

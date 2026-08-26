@@ -6,6 +6,7 @@ from Src.agent.parser import (
     parse_and_save_unit_tests,
 )
 from Src.agent.prompts.review import REVIEW_SYSTEM
+from Src.agent.prompts.unit_test import UNIT_TEST_SYSTEM
 
 
 def test_review_parser_accepts_fenced_json(isolated_database) -> None:
@@ -51,6 +52,14 @@ def test_review_parser_rejects_non_json(isolated_database) -> None:
         parse_and_save_review("7", "review complete")
 
 
+def test_review_parser_rejects_invalid_finding_schema(isolated_database) -> None:
+    with pytest.raises(ValueError, match=r"findings\[0\].line_start is not an integer"):
+        parse_and_save_review(
+            "7",
+            '{"findings":[{"description":"指摘","line_start":"12"}]}',
+        )
+
+
 def test_review_parser_restarts_finding_numbers_for_each_mr(
     isolated_database,
 ) -> None:
@@ -83,6 +92,12 @@ def test_re_review_skips_findings_overlapping_applied_ai_fixes(
 
 def test_review_prompt_requires_japanese_findings() -> None:
     assert "description` は必ず自然な日本語で記述すること" in REVIEW_SYSTEM
+
+
+def test_unit_test_prompt_requires_safe_flutter_widget_harness() -> None:
+    assert "Builder`が提供する`BuildContext`" in UNIT_TEST_SYSTEM
+    assert "既存アセットだけを参照" in UNIT_TEST_SYSTEM
+    assert "resetPhysicalSize" in UNIT_TEST_SYSTEM
 
 
 def test_unit_test_parser_ignores_markdown_fences() -> None:
