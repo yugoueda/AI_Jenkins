@@ -194,3 +194,6 @@ def test_successful_post_resolution_build_enqueues_test_generation(
     assert isolated_database.query_scalar(
         "SELECT event_type FROM job_queue"
     ) == "UNIT_TEST_GEN"
+    assert isolated_database.query_scalar(
+        "SELECT COUNT(*) FROM job_queue WHERE event_type='RE_REVIEW'"
+    ) == 0

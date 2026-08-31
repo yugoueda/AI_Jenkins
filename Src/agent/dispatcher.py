@@ -276,13 +276,13 @@ async def dispatch(job: dict) -> None:
                         await gitlab_comments.post_comment(
                             project_id,
                             mr_id,
-                            f"⚠️ 再レビュー用ビルドを開始できませんでした: {exc}",
+                            f"⚠️ テスト生成前ビルドを開始できませんでした: {exc}",
                         )
                     else:
                         await gitlab_comments.post_comment(
                             project_id,
                             mr_id,
-                            f"🔄 全指摘の対応が完了したため、再レビュー用ビルドを開始しました（{build_status}）。",
+                            f"🔄 AI修正の承認が完了したため、テスト生成前ビルドを開始しました（{build_status}）。",
                         )
         return
 
