@@ -158,13 +158,13 @@ async def _handle_ai(
                 await _post_error(
                     project_id,
                     mr_id,
-                    f"再レビュー用ビルドを開始できません: {exc}",
+                    f"テスト生成前ビルドを開始できません: {exc}",
                 )
             else:
                 await gitlab.post_comment(
                     project_id,
                     mr_id,
-                    "🔄 全指摘の対応が完了したため、再レビュー用ビルドを開始しました。",
+                    "🔄 全指摘の対応が完了したため、テスト生成前ビルドを開始しました。",
                 )
         return
 

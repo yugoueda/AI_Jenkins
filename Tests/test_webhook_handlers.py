@@ -84,7 +84,7 @@ def test_reject_updates_finding_and_starts_re_review_build(
     assert calls[0]["review_event_type"] == "POST_RESOLUTION"
     assert messages == [
         ("42", "7", "✅ R1 の指摘を却下しました。"),
-        ("42", "7", "🔄 全指摘の対応が完了したため、再レビュー用ビルドを開始しました。"),
+        ("42", "7", "🔄 全指摘の対応が完了したため、テスト生成前ビルドを開始しました。"),
     ]
 
 
