@@ -20,15 +20,22 @@ check_health() {
     || log "jenkins: not reachable yet"
 }
 
-pull_flutter_image_if_missing() {
-  log "Checking Flutter build image in Jenkins DinD volume"
+pull_ci_image_if_missing() {
+  local ci_image
+  ci_image="$(docker compose exec -T jenkins printenv CI_IMAGE | tr -d '\r')"
+  if [ -z "$ci_image" ]; then
+    log "CI_IMAGE is empty; Build/Lint/Test commands will run in the Jenkins container"
+    return
+  fi
+
+  log "Checking CI image in Jenkins DinD volume: $ci_image"
   if docker compose exec -T jenkins \
-      docker image inspect ghcr.io/cirruslabs/flutter:stable >/dev/null 2>&1; then
-    log "Flutter image already present, skipping pull"
+      docker image inspect "$ci_image" >/dev/null 2>&1; then
+    log "CI image already present, skipping pull"
   else
-    log "Flutter image missing, pulling ghcr.io/cirruslabs/flutter:stable"
+    log "CI image missing, pulling $ci_image"
     docker compose exec -T jenkins \
-      docker pull ghcr.io/cirruslabs/flutter:stable
+      docker pull "$ci_image"
   fi
 }
 
@@ -37,7 +44,7 @@ cmd_up() {
   docker compose --profile agent up -d --no-build --wait
   docker compose ps
   ./scripts/claude-login.sh status
-  pull_flutter_image_if_missing
+  pull_ci_image_if_missing
   check_health
   log "Demo environment is up."
 }
@@ -48,7 +55,7 @@ cmd_rebuild() {
   docker compose --profile agent up -d --no-build --force-recreate --wait
   docker compose ps
   ./scripts/claude-login.sh status
-  pull_flutter_image_if_missing
+  pull_ci_image_if_missing
   check_health
   log "Rebuild complete. Run '$0 jobs' if Jenkinsfile.* or create-ai-review-jobs.groovy changed."
 }

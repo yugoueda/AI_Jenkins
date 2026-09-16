@@ -1,234 +1,88 @@
 # AI Review Jenkins
 
-Jenkins LTS を Docker Compose で起動する構成です。Jenkins本体、プラグイン、
-Python 3、Git、Docker CLIを配布用イメージに含めています。CIジョブ用のDocker
-daemonはTLS付きの専用コンテナとして分離し、JenkinsのデータはDocker named
-volumeへ永続化します。
+GitLabのMerge Requestを起点に、JenkinsによるBuild/Lint、Claude CodeによるAIレビュー、
+修正案の適用、テスト生成とカバレッジ通知を行うシステムです。Jenkins、専用Docker
+daemon、Webhookサーバー、workerをDocker Composeで構成し、実行データと認証状態は
+Docker named volumeへ永続化します。
 
-## 前提
+環境を構築する場合は、
+[CloneからAIレビュー実行までの初回導入手順](Doc/初回導入手順.md)に従ってください。
 
-- WSL 2 上の Ubuntu（Ubuntuの細かなバージョンには非依存）
-- Docker Engine + Docker Compose v2、または Docker Desktop のWSL連携
-- 推奨: メモリ4 GB以上、空き容量50 GB以上
+## 概要
 
-PowerShellでWSL 2か確認できます。
+[PDF版](Doc/企画書_要約スライド.pdf) / [Markdown版](Doc/企画書_要約スライド.md) /
 
-```powershell
-wsl -l -v
-```
+## 主な機能
 
-`VERSION` が `1` の場合は、ディストリビューション名を指定して変換します。
+- MR作成時のBuild/LintとAIレビューの自動実行
+- コード行に紐づく解決可能なGitLab Discussionの投稿
+- ビルド失敗原因と修正案の通知
+- 同一コミットのWebhook重複排除と、同一MR内の順次実行
+- AI修正案の確認、承認、コミット
+- テストの生成、実行、C0/C1カバレッジの通知
+- Jenkins、DB、Claude Code認証情報の永続化
 
-```powershell
-wsl --set-version Ubuntu 2
-```
+処理は次の順序で進みます。
 
-UbuntuのバージョンはWSL内で次のコマンドから確認できます。この構成はDocker内に
-JavaやPythonを含めるため、特定のUbuntuリリースには依存しません。
+![AI Review Jenkinsの全体フロー](Doc/images/全体フロー.png)
 
-```bash
-cat /etc/os-release
-./scripts/check-jenkins-host.sh
-```
+MRコメントでは次のコマンドを利用できます。
 
-## WSLでの初回起動
+| コマンド           | 動作                                       |
+| ------------------ | ------------------------------------------ |
+| `/ai review`     | AIレビューを手動実行                       |
+| `/ai apply R1`   | 指摘`R1`の修正案を差分表示               |
+| `/ai approve R1` | 指摘`R1`の修正をソースブランチへコミット |
+| `/ai reject R1`  | 指摘`R1`を却下                           |
+| `/ai test`       | テスト生成を手動実行                       |
 
-リポジトリは `/mnt/c/...` ではなく、WSL側のファイルシステム
-（例: `/opt/ai-review` または `~/ai-review`）へ置くことを推奨します。
+## 構成
 
-```bash
-./scripts/check-jenkins-host.sh
-./scripts/setup-docker.sh
-```
+| コンポーネント | 役割                                                |
+| -------------- | --------------------------------------------------- |
+| `jenkins`    | Build/Lint/Test Pipelineの実行                      |
+| `docker`     | Jenkinsジョブ専用のDocker-in-Docker daemon          |
+| `webhook`    | GitLab Webhookの検証、Jenkins起動、コールバック受付 |
+| `worker`     | キュー処理、Claude Code実行、GitLabへの結果投稿     |
+| `agent-init` | DBマイグレーションとvolume初期化                    |
 
-`setup-docker.sh` は初回のみ `.env.example` から `.env` を作成し、Compose定義の検証、
-イメージのビルド、ヘルスチェック付き起動まで行います。WebhookとCLIエージェントも
-同時に構築する場合は `./scripts/setup-docker.sh --with-agent` を使います。
-
-起動完了後、WindowsまたはWSLのブラウザから
-<http://localhost:8080> を開きます。初回解除パスワードは次で確認できます。
-
-```bash
-docker compose exec jenkins \
-  cat /var/jenkins_home/secrets/initialAdminPassword
-```
-
-画面の案内に従い、管理者ユーザーを作成してください。必要なプラグインはイメージへ
-導入済みなので、初回画面では追加インストールをスキップできます。
-
-## Claude Code CLIエージェント
-
-Claude Pro/Maxアカウントを利用する場合はAPIキー不要です。初回だけworkerコンテナの
-Claude Codeからアカウント認証し、ログイン情報を専用Docker volumeへ保存します。
-
-```bash
-./scripts/agent-image.sh build
-docker compose --profile agent up -d --no-build --wait
-./scripts/claude-login.sh login
-./scripts/claude-login.sh status
-```
-
-対話ログインの認証情報は専用Docker volumeへ保存されます。詳しいコンテナ内での
-認証手順、疎通確認、別PCへの導入方法は
-[Claude Code CLIエージェント導入手順](Doc/CLIエージェント導入手順.md)を参照して
-ください。
-
-個人GitLab.comを使うデモでは、Webhookポートを直接インターネットへ公開せず、
-ngrokのHTTPSトンネルを使用します。認証要件と、将来社内GitLabへ移行する際の
-ネットワーク・TLS・運用上の課題は
-[デモ版 Webhook外部公開方針](Doc/デモ版_Webhook外部公開方針.md)を参照してください。
-日常的な起動、Flutterイメージの準備、ngrok接続、疎通確認、停止については
-[デモ環境の再開・停止手順](Doc/デモ環境_再開・停止手順.md)にまとめています。
-
-### Webhook以降の連携設定
-
-MR作成後の処理は `GitLab → webhook → Jenkins build → webhook callback →
-job_queue → worker → GitLab` の順で動作します。`.env`には少なくとも次を設定します。
-
-```dotenv
-GITLAB_URL=https://gitlab.example.com
-GITLAB_TOKEN=<API token>
-JENKINS_USER=<Jenkins user>
-JENKINS_TOKEN=<Jenkins API token>
-JENKINS_BUILD_JOB=ai-review-build
-JENKINS_TEST_JOB=ai-review-test
-JENKINS_CALLBACK_TOKEN=<random internal token>
-```
-
-Flutter参照プロジェクトのBuild/Lint/Testは、標準Flutterイメージで実行します。
-ビルド対象はWebのみで、`flutter build web`を使用します。
-静的解析では`--no-fatal-infos`を使用し、infoレベルの指摘だけではAIレビューを
-停止しません。warningまたはerrorで失敗した場合は、従来どおり失敗を通知します。
-MR作成時には利用可能な`/ai`コマンドをMRコメントで案内します。ビルドに失敗した場合は
-即時に失敗を通知し、workerによる解析完了後に原因と修正案を追加コメントします。
-AIレビューの指摘は対象ファイルの対象行へ解決可能なDiscussionとして投稿します。
-対象行が現在の差分に含まれない場合だけ、ファイル名と行番号を含む通常コメントへ
-フォールバックします。
-GitLab WebhookではMerge request eventsとNote eventsの両方を有効にしてください。
-
-CLIエージェントの実行状況はworkerのログで確認できます。プロンプト本文やレビュー結果の
-本文は出力せず、ジョブID、イベント種別、試行回数、経過時間、終了コードを表示します。
-
-```bash
-docker compose logs -f worker
-```
-
-既定の最大ターン数は`CLAUDE_MAX_TURNS=30`、進行ログの間隔は
-`AGENT_PROGRESS_INTERVAL_SECONDS=15`秒です。必要に応じて`.env`で変更できます。
-
-Open状態かつDB上の指摘が0件のMRへコミットが追加されると、Webビルドを自動で
-再実行します。ビルド・静的解析が成功するとAIレビューへ進みます。同じコミットSHAの
-Webhook再送は重複実行せず、同一MRのビルド中に追加されたコミットはDBへ保留して、
-現行ビルド完了後に順次実行します。
-
-最後の指摘を`/ai approve Rn`で適用した場合は、対象コミットをWebビルドし、
-ビルド・静的解析が成功すると再レビューを省略してテスト生成へ直接進みます。
-`/ai reject Rn`で最後のOpen指摘を却下した場合も、同じくWebビルド後にテスト生成へ進みます。
-生成テストはMRのsource branchへコミットして
-`ai-review-test`を起動します。テスト結果とC0/C1カバレッジはMRコメントへ通知され、
-コンパイルエラーやテスト失敗時も失敗結果とログの要約が投稿されます。
-
-GitLab.comの実Webhookでは、最後のDiscussionを手動Resolveしても
-`blocking_discussions_resolved`が通知されない場合があるため、この操作を起点とする
-自動再レビューは現行デモの対象外です。手動修正・Resolve後は`/ai review`で確認し、
-問題がなければ`/ai test`でテスト生成を開始してください。
-
-`/ai test`をコメントするとテスト生成だけを手動実行できます。未解決の指摘が残る状態で
-実行すると、修正前コードで失敗するバグ再現テストが生成される可能性があるため、
-AI指摘への対応または手動レビューを完了してから実行してください。
-
-新規Jenkins環境では次のPipelineジョブがイメージ初期化時に自動作成されます。
+新規Jenkins環境では次のPipelineジョブが自動作成されます。
 
 - `ai-review-build`: `jenkins/Jenkinsfile.build`
 - `ai-review-test`: `jenkins/Jenkinsfile.test`
 
-GitLab用Credential IDは既定で`gitlab-token`です。別名を使う場合は
-`GITLAB_CREDENTIALS_ID`を変更してください。Jenkinsコールバック先はCompose内部の
-`http://webhook:8000`で、外部公開しません。
+Build/Lint/Testに使用するコンテナイメージとコマンドは`.env`で変更できます。
+リポジトリに含まれる初期値はFlutter Web向けですが、導入対象プロジェクトに合わせて
+設定することを前提としています。
 
-## 他環境へ配布
+## ドキュメント
 
-詳細は [Jenkinsを別PCへ導入する手順](Doc/Jenkins_別PC導入手順.md) を参照して
-ください。Container Registry経由と、Registryを使わないオフライン移送の両方に
-対応しています。
+| 用途                                | ドキュメント                                                   |
+| ----------------------------------- | -------------------------------------------------------------- |
+| Clone後の初回構築と動作確認         | [初回導入手順](Doc/初回導入手順.md)                             |
+| 日常的な起動、状態確認、ログ、停止  | [デモ環境の再開・停止手順](Doc/デモ環境_再開・停止手順.md)      |
+| Claude Codeの認証とエージェント運用 | [CLIエージェント導入手順](Doc/CLIエージェント導入手順.md)       |
+| GitLab.com向けWebhook公開           | [デモ版 Webhook外部公開方針](Doc/デモ版_Webhook外部公開方針.md) |
+| Registry配布とオフライン移送        | [Jenkinsを別PCへ導入する手順](Doc/Jenkins_別PC導入手順.md)      |
+| システムの内部設計                  | [技術設計書](Doc/技術設計書.md)                                 |
+| 処理フロー                          | [シーケンス図](Doc/シーケンス図.md)                             |
 
-配布先のDocker Registry（GitLab Container Registry、GHCR、Docker Hubなど）を
-決め、`.env` の `JENKINS_IMAGE` を実際の名前へ変更します。
+## 現行仕様の注意点
 
-```dotenv
-JENKINS_IMAGE=registry.example.com/your-team/ai-jenkins:2.568.1-1
-```
+- WebhookではMerge request eventsとNote eventsの両方を使用します。
+- GitLab.com向けデモではWebhookポートを直接公開せず、ngrokのHTTPSトンネルを使用します。
+- 最後のDiscussionを手動Resolveしても、GitLab.comから状態変更が通知されない場合があります。
+  手動修正後は`/ai review`で確認し、問題がなければ`/ai test`を実行してください。
+- 未解決の指摘がある状態で`/ai test`を実行すると、修正前コードを前提としたテストが生成
+  される可能性があります。
+- JenkinsからWebhookへのコールバックはCompose内部ネットワークだけを使用します。
+- `docker compose down -v`はJenkins設定、DB、Claude認証などの永続データを削除します。
 
-`.env` の `AGENT_IMAGE` も同じRegistry配下の名前に変更します。Registryへログインした
-状態で、ビルド元から両方のイメージをまとめてpushします。
-
-```bash
-./scripts/publish-images.sh
-```
-
-導入先には `compose.yaml`、`.env`、空の `jenkins/certs/` を配置すれば、ビルドせずに
-取得して起動できます。CLIエージェントも使う場合は `scripts/claude-login.sh` もコピー
-してください。
-
-```bash
-docker compose --profile agent pull
-docker compose up -d --no-build
-```
-
-Registryを利用できない場合は、Jenkins、DinD、Claude Codeエージェントの各イメージを
-オフラインバンドルにできます。
-
-```bash
-./scripts/export-jenkins-bundle.sh
-```
-
-Jenkinsの設定・ジョブ・認証情報は `ai-jenkins_jenkins-home` volumeに保存されます。
-コンテナやイメージを更新しても保持されます。
-
-## 運用コマンド
-
-```bash
-# 状態
-docker compose ps
-
-# Jenkinsログ
-docker compose logs -f jenkins
-
-# 停止（データは保持）
-docker compose --profile agent down
-
-# 配布済みイメージへ更新
-docker compose pull
-docker compose up -d --no-build
-
-# バックアップ
-docker run --rm \
-  -v ai-jenkins_jenkins-home:/source:ro \
-  -v "$PWD/backups:/backup" \
-  alpine tar czf /backup/jenkins-home.tgz -C /source .
-```
-
-`docker compose down -v` はJenkinsの全データを削除するため、通常運用では実行
-しないでください。
-
-## LAN公開と社内CA
-
-初期値では `127.0.0.1:8080` のみに公開します。社内LANからアクセスさせる場合は、
-`.env` の `JENKINS_HTTP_HOST=0.0.0.0` に変更し、nginx等でTLS・アクセス制限を
-設定してください。WSLのネットワーク方式によっては、Windows側のファイアウォール
-設定や `netsh interface portproxy` も必要です。
-
-社内GitLabなどが独自CAを使う場合は、CA証明書（`.crt` または `.pem`）を
-`jenkins/certs/` に置いてから再起動します。
-
-```bash
-docker compose up -d --force-recreate cert-init jenkins
-```
-
-## 設計上の注意
+## セキュリティ上の構成
 
 - Jenkins controllerは非rootユーザーで動作します。
-- Docker操作は特権のDinDサービスへTLS接続します。DinDはホストへポート公開しません。
-- inbound agent用の50000番ポートは未公開です。現在の単一ノード構成では不要です。
-- `jenkins/jenkins:2.568.1-jdk21` を基底に固定しています。更新時はバックアップ後に
-  `JENKINS_BASE_IMAGE` と配布イメージのタグを更新し、検証してからpushしてください。
+- Docker操作はTLS接続された専用DinDサービスで実行します。
+- DinDとJenkins inbound agent用ポートはホストへ公開しません。
+- JenkinsとWebhookの公開先は初期値で`127.0.0.1`に限定しています。
+- GitLab、Jenkins、Claudeのトークンは`.env`または専用Docker volumeで管理し、
+  リポジトリには含めません。
